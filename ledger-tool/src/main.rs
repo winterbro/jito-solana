@@ -4352,6 +4352,7 @@ fn main() {
                     if slot > ending_slot {
                         break;
                     }
+                    info!("sending shreds for slot {}", slot);
                     if let Ok(shreds) = source.get_data_shreds_for_slot(slot, 0) {
                         for shred in shreds {
                             udp_socket

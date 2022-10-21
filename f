@@ -5,8 +5,8 @@ set -eux
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" &>/dev/null && pwd)"
 
-GIT_SHA="$(git describe --always --dirty)"
-
+#GIT_SHA="$(git describe --always --dirty)" || "dev_build"
+GIT_SHA="dev"
 echo $GIT_SHA
 
 DOCKER_BUILDKIT=1 docker build \
