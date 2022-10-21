@@ -4356,7 +4356,7 @@ fn main() {
                     if let Ok(shreds) = source.get_data_shreds_for_slot(slot, 0) {
                         for shred in shreds {
                             udp_socket
-                                .send_to(shred.payload().unwrap(), &addr)
+                                .send_to(shred.payload(), &addr)
                                 .expect("shred sent");
                         }
                     }
