@@ -4352,7 +4352,13 @@ fn main() {
                     if slot > ending_slot {
                         break;
                     }
-                    if let Ok(shreds) = source.get_data_shreds_for_slot(slot, 0) {}
+                    if let Ok(shreds) = source.get_data_shreds_for_slot(slot, 0) {
+                        for shred in shreds {
+                            udp_socket
+                                .send_to(shred.payload().unwrap(), &addr)
+                                .expect("shred sent");
+                        }
+                    }
                 }
             }
             ("", _) => {
