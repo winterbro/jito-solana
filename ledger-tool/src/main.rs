@@ -1,4 +1,5 @@
 #![allow(clippy::integer_arithmetic)]
+
 use {
     crate::{bigtable::*, ledger_path::*},
     chrono::{DateTime, Utc},
@@ -88,6 +89,7 @@ use {
         ffi::OsStr,
         fs::File,
         io::{self, stdout, BufRead, BufReader, Write},
+        net::{SocketAddr, UdpSocket},
         path::{Path, PathBuf},
         process::{exit, Command, Stdio},
         str::FromStr,
@@ -2250,6 +2252,18 @@ fn main() {
                            If no file name is specified, it will print the metadata of all ledger files.")
             )
         )
+        .subcommand(
+            SubCommand::with_name("send_shreds")
+                .about("Send a shred range to a socket address")
+                .arg(&starting_slot_arg)
+                .arg(&ending_slot_arg)
+                .arg(
+                    Arg::with_name("addr")
+                        .value_name("ADDR:PORT")
+                        .takes_value(true)
+                        .help("Address and port to send shreds to"),
+                )
+        )
         .get_matches();
 
     info!("{} {}", crate_name!(), solana_version::version!());
@@ -4320,6 +4334,25 @@ fn main() {
                 let sst_file_name = arg_matches.value_of("file_name");
                 if let Err(err) = print_blockstore_file_metadata(&blockstore, &sst_file_name) {
                     eprintln!("{}", err);
+                }
+            }
+            ("send_shreds", Some(arg_matches)) => {
+                let starting_slot = value_t_or_exit!(arg_matches, "starting_slot", Slot);
+                let ending_slot = value_t_or_exit!(arg_matches, "ending_slot", Slot);
+                let addr = value_t_or_exit!(arg_matches, "addr", SocketAddr);
+                let udp_socket = UdpSocket::bind("0.0.0.0:0").unwrap();
+                let source = open_blockstore(
+                    &ledger_path,
+                    AccessType::Secondary,
+                    None,
+                    &shred_storage_type,
+                    force_update_to_open,
+                );
+                for (slot, _meta) in source.slot_meta_iterator(starting_slot).unwrap() {
+                    if slot > ending_slot {
+                        break;
+                    }
+                    if let Ok(shreds) = source.get_data_shreds_for_slot(slot, 0) {}
                 }
             }
             ("", _) => {
