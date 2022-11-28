@@ -27,6 +27,7 @@ ignores=(
   node_modules
   jito-programs
   anchor
+  geyser-grpc-plugin
 )
 
 not_paths=()
