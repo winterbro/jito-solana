@@ -5,8 +5,9 @@
 //!
 use {
     crate::{block_cost_limits::*, cost_model::TransactionCost},
+    log::info,
     solana_sdk::{clock::Slot, pubkey::Pubkey, saturating_add_assign},
-    std::{cmp::Ordering, collections::HashMap},
+    std::{cmp::Ordering, collections::HashMap, str::FromStr},
 };
 
 const WRITABLE_ACCOUNTS_PER_BLOCK: usize = 512;
@@ -189,11 +190,6 @@ impl CostTracker {
     ) -> Result<(), CostTrackerError> {
         let vote_cost = if is_vote { cost } else { 0 };
 
-        // check against the total package cost
-        if self.block_cost.saturating_add(cost) > self.block_cost_limit {
-            return Err(CostTrackerError::WouldExceedBlockMaxLimit);
-        }
-
         // if vote transaction, check if it exceeds vote_transaction_limit
         if self.vote_cost.saturating_add(vote_cost) > self.vote_cost_limit {
             return Err(CostTrackerError::WouldExceedVoteMaxLimit);
@@ -218,7 +214,19 @@ impl CostTracker {
         }
 
         // check each account against account_cost_limit,
+        let mut is_canary = false;
         for account_key in write_lock_accounts {
+            // POC hack to reserve space for canary bundles
+            if *account_key
+                == Pubkey::from_str("enZzkYKb638AgsX2ej2WpP18S29ZciDVdvERKr4SM59").unwrap()
+                || (!is_vote
+                    && *account_key
+                        == Pubkey::from_str("5C3riB5Ugmj73ta3mpSzYb2SZuoF8fcsaciZPYKCHnUp")
+                            .unwrap())
+            {
+                is_canary = true;
+            }
+
             match self.cost_by_writable_accounts.get(account_key) {
                 Some(chained_cost) => {
                     if chained_cost.saturating_add(cost) > self.account_cost_limit {
@@ -229,6 +237,19 @@ impl CostTracker {
                 }
                 None => continue,
             }
+        }
+
+        // Reserve space for canary bundle
+        let block_cost_limit = if is_canary {
+            info!("Reserve Space accessed enZzkYKb638AgsX2ej2WpP18S29ZciDVdvERKr4SM59");
+            self.block_cost_limit
+        } else {
+            self.block_cost_limit - 378381
+        };
+
+        // check against the total package cost
+        if self.block_cost.saturating_add(cost) > block_cost_limit {
+            return Err(CostTrackerError::WouldExceedBlockMaxLimit);
         }
 
         Ok(())
