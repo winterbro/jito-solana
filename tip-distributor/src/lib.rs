@@ -9,10 +9,10 @@ use {
         stake_meta_generator_workflow::StakeMetaGeneratorError::CheckedMathError,
     },
     bigdecimal::{num_bigint::BigUint, BigDecimal},
-    log::{error, info},
+    log::*,
     num_traits::{CheckedDiv, CheckedMul, ToPrimitive},
     serde::{de::DeserializeOwned, Deserialize, Serialize},
-    solana_client::nonblocking::rpc_client::RpcClient,
+    solana_client::{nonblocking::rpc_client::RpcClient, rpc_client::RpcClient as SyncRpcClient},
     solana_merkle_tree::MerkleTree,
     solana_sdk::{
         account::{AccountSharedData, ReadableAccount},
@@ -65,9 +65,30 @@ pub struct TipPaymentPubkeys {
     tip_pdas: Vec<Pubkey>,
 }
 
+fn valid_tree_nodes(
+    tree_nodes: &[TreeNode],
+    tip_distribution_account: &Pubkey,
+    rpc_client: &SyncRpcClient,
+) -> bool {
+    let actual_claims: u64 = tree_nodes.iter().map(|t| t.amount).sum();
+    let tda = rpc_client.get_account(&tip_distribution_account).unwrap();
+    let min_rent = rpc_client
+        .get_minimum_balance_for_rent_exemption(tda.data.len())
+        .unwrap();
+
+    let expected_claims = tda.lamports.checked_sub(min_rent).unwrap();
+    if actual_claims != expected_claims {
+        error!("actual_claims={actual_claims}, expected_claims={expected_claims}");
+        false
+    } else {
+        true
+    }
+}
+
 impl GeneratedMerkleTreeCollection {
     pub fn new_from_stake_meta_collection(
         stake_meta_coll: StakeMetaCollection,
+        rpc_client: &SyncRpcClient,
     ) -> Result<GeneratedMerkleTreeCollection, MerkleRootGeneratorError> {
         let generated_merkle_trees = stake_meta_coll
             .stake_metas
@@ -78,6 +99,13 @@ impl GeneratedMerkleTreeCollection {
                     Err(e) => return Some(Err(e)),
                     Ok(maybe_tree_nodes) => maybe_tree_nodes,
                 }?;
+
+                if let Some(tda) = stake_meta.maybe_tip_distribution_meta.as_ref() {
+                    if !valid_tree_nodes(&tree_nodes[..], &tda.tip_distribution_pubkey, rpc_client)
+                    {
+                        return None;
+                    }
+                }
 
                 let hashed_nodes: Vec<[u8; 32]> =
                     tree_nodes.iter().map(|n| n.hash().to_bytes()).collect();
