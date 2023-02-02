@@ -78,7 +78,7 @@ fn valid_tree_nodes(
 
     let expected_claims = tda.lamports.checked_sub(min_rent).unwrap();
     if actual_claims != expected_claims {
-        error!("actual_claims={actual_claims}, expected_claims={expected_claims}");
+        error!("tip_distribution_account={tip_distribution_account},actual_claims={actual_claims}, expected_claims={expected_claims}");
         false
     } else {
         true
