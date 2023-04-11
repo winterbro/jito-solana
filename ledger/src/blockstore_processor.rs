@@ -855,17 +855,18 @@ pub fn confirm_slot(
     }
 
     let last_entry_hash = entries.last().map(|e| e.hash);
-    let verifier = if !skip_verification {
-        datapoint_debug!("verify-batch-size", ("size", num_entries as i64, i64));
-        let entry_state = entries.start_verify(&progress.last_entry, recyclers.clone());
-        if entry_state.status() == EntryVerificationStatus::Failure {
-            warn!("Ledger proof of history failed at slot: {}", slot);
-            return Err(BlockError::InvalidEntryHash.into());
-        }
-        Some(entry_state)
-    } else {
-        None
-    };
+    // let verifier = None; // TODO (LB): don't do this at home
+    //     = if !skip_verification {
+    //     datapoint_debug!("verify-batch-size", ("size", num_entries as i64, i64));
+    //     let entry_state = entries.start_verify(&progress.last_entry, recyclers.clone());
+    //     if entry_state.status() == EntryVerificationStatus::Failure {
+    //         warn!("Ledger proof of history failed at slot: {}", slot);
+    //         return Err(BlockError::InvalidEntryHash.into());
+    //     }
+    //     Some(entry_state)
+    // } else {
+    //     None
+    // };
 
     let verify_transaction = {
         let bank = bank.clone();
@@ -922,18 +923,18 @@ pub fn confirm_slot(
                 return Err(TransactionError::SignatureFailure.into());
             }
 
-            if let Some(mut verifier) = verifier {
-                let verified = verifier.finish_verify();
-                timing.poh_verify_elapsed += verifier.poh_duration_us();
-                // The GPU Entry verification (if any) is kicked off right when the CPU-side
-                // Entry verification finishes, so these times should be disjoint
-                timing.transaction_verify_elapsed +=
-                    transaction_cpu_duration_us + check_result.gpu_verify_duration();
-                if !verified {
-                    warn!("Ledger proof of history failed at slot: {}", bank.slot());
-                    return Err(BlockError::InvalidEntryHash.into());
-                }
-            }
+            // if let Some(mut verifier) = verifier {
+            //     let verified = verifier.finish_verify();
+            //     timing.poh_verify_elapsed += verifier.poh_duration_us();
+            //     // The GPU Entry verification (if any) is kicked off right when the CPU-side
+            //     // Entry verification finishes, so these times should be disjoint
+            //     timing.transaction_verify_elapsed +=
+            //         transaction_cpu_duration_us + check_result.gpu_verify_duration();
+            //     if !verified {
+            //         warn!("Ledger proof of history failed at slot: {}", bank.slot());
+            //         return Err(BlockError::InvalidEntryHash.into());
+            //     }
+            // }
 
             process_result?;
 

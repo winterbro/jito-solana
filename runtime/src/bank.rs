@@ -6448,7 +6448,7 @@ impl Bank {
     pub fn verify_transaction(
         &self,
         tx: VersionedTransaction,
-        verification_mode: TransactionVerificationMode,
+        _verification_mode: TransactionVerificationMode,
     ) -> Result<SanitizedTransaction> {
         let sanitized_tx = {
             let size =
@@ -6456,12 +6456,12 @@ impl Bank {
             if size > PACKET_DATA_SIZE as u64 {
                 return Err(TransactionError::SanitizeFailure);
             }
-            let message_hash = if verification_mode == TransactionVerificationMode::FullVerification
-            {
-                tx.verify_and_hash_message()?
-            } else {
-                tx.message.hash()
-            };
+            let message_hash = tx.message.hash(); //if verification_mode == TransactionVerificationMode::FullVerification
+                                                  // {
+                                                  //     tx.verify_and_hash_message()?
+                                                  // } else {
+                                                  //     tx.message.hash()
+                                                  // };
 
             SanitizedTransaction::try_create(
                 tx,
@@ -6473,11 +6473,11 @@ impl Bank {
             )
         }?;
 
-        if verification_mode == TransactionVerificationMode::HashAndVerifyPrecompiles
-            || verification_mode == TransactionVerificationMode::FullVerification
-        {
-            sanitized_tx.verify_precompiles(&self.feature_set)?;
-        }
+        // if verification_mode == TransactionVerificationMode::HashAndVerifyPrecompiles
+        //     || verification_mode == TransactionVerificationMode::FullVerification
+        // {
+        //     sanitized_tx.verify_precompiles(&self.feature_set)?;
+        // }
 
         Ok(sanitized_tx)
     }
