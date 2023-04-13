@@ -32,9 +32,12 @@ use {
     solana_geyser_plugin_manager::block_metadata_notifier_interface::BlockMetadataNotifierLock,
     solana_gossip::cluster_info::ClusterInfo,
     solana_ledger::{
+        bank_transaction_executor::{
+            BankTransactionExecutor, BankTransactionExecutorHandle, TransactionStatusSender,
+        },
         block_error::BlockError,
         blockstore::Blockstore,
-        blockstore_processor::{self, BlockstoreProcessorError, TransactionStatusSender},
+        blockstore_processor::{self, BlockstoreProcessorError},
         leader_schedule_cache::LeaderScheduleCache,
         leader_schedule_utils::first_of_consecutive_leader_slots,
     },
@@ -406,6 +409,8 @@ impl ReplayStage {
         let t_replay = Builder::new()
             .name("solana-replay-stage".to_string())
             .spawn(move || {
+                const MAX_CONFIRM_SLOT_PROCESSING_DURATION: Duration = Duration::from_millis(100);
+
                 let verify_recyclers = VerifyRecyclers::default();
                 let _exit = Finalizer::new(exit.clone());
                 let mut identity_keypair = cluster_info.keypair().clone();
@@ -436,6 +441,9 @@ impl ReplayStage {
                     last_print_time: Instant::now(),
                 };
                 let in_vote_only_mode = bank_forks.read().unwrap().get_vote_only_mode_signal();
+
+                let bank_tx_execution = BankTransactionExecutor::new(num_cpus::get() * 2);
+                let handle = bank_tx_execution.handle();
 
                 loop {
                     // Stop getting entries if we get exit signal
@@ -486,6 +494,8 @@ impl ReplayStage {
                         block_metadata_notifier.clone(),
                         transaction_cost_metrics_sender.as_ref(),
                         &mut replay_timing,
+                        &handle,
+                        &MAX_CONFIRM_SLOT_PROCESSING_DURATION
                     );
                     replay_active_banks_time.stop();
 
@@ -893,6 +903,9 @@ impl ReplayStage {
                         retransmit_not_propagated_time.as_us(),
                     );
                 }
+
+                drop(handle);
+                let _result = bank_tx_execution.join();
             })
             .unwrap();
 
@@ -1659,24 +1672,33 @@ impl ReplayStage {
         replay_vote_sender: &ReplayVoteSender,
         transaction_cost_metrics_sender: Option<&TransactionCostMetricsSender>,
         verify_recyclers: &VerifyRecyclers,
+        handle: &BankTransactionExecutorHandle,
+        max_confirm_slot_processing_time: &Duration,
     ) -> result::Result<usize, BlockstoreProcessorError> {
         let tx_count_before = bank_progress.replay_progress.num_txs;
         // All errors must lead to marking the slot as dead, otherwise,
         // the `check_slot_agrees_with_cluster()` called by `replay_active_banks()`
         // will break!
-        blockstore_processor::confirm_slot(
-            blockstore,
-            bank,
-            &mut bank_progress.replay_stats,
-            &mut bank_progress.replay_progress,
-            false,
-            transaction_status_sender,
-            Some(replay_vote_sender),
-            transaction_cost_metrics_sender,
-            None,
-            verify_recyclers,
-            false,
-        )?;
+
+        // loop over until no more entries to process
+        let start = Instant::now();
+        while start.elapsed() < *max_confirm_slot_processing_time
+            && blockstore_processor::confirm_slot(
+                blockstore,
+                bank,
+                &mut bank_progress.replay_stats,
+                &mut bank_progress.replay_progress,
+                false,
+                transaction_status_sender,
+                Some(replay_vote_sender),
+                transaction_cost_metrics_sender,
+                None,
+                verify_recyclers,
+                false,
+                handle,
+            )?
+        {}
+
         let tx_count_after = bank_progress.replay_progress.num_txs;
         let tx_count = tx_count_after - tx_count_before;
         Ok(tx_count)
@@ -2174,6 +2196,8 @@ impl ReplayStage {
         block_metadata_notifier: Option<BlockMetadataNotifierLock>,
         transaction_cost_metrics_sender: Option<&TransactionCostMetricsSender>,
         replay_timing: &mut ReplayTiming,
+        handle: &BankTransactionExecutorHandle,
+        max_confirm_slot_processing_time: &Duration,
     ) -> bool {
         let mut did_complete_bank = false;
         let mut tx_count = 0;
@@ -2226,6 +2250,8 @@ impl ReplayStage {
                     replay_vote_sender,
                     transaction_cost_metrics_sender,
                     verify_recyclers,
+                    handle,
+                    max_confirm_slot_processing_time,
                 );
                 replay_blockstore_time.stop();
                 replay_timing.replay_blockstore_us += replay_blockstore_time.as_us();
@@ -3207,6 +3233,7 @@ pub mod tests {
                 SIZE_OF_COMMON_SHRED_HEADER, SIZE_OF_DATA_SHRED_HEADER, SIZE_OF_DATA_SHRED_PAYLOAD,
             },
         },
+        solana_rayon_threadlimit::get_thread_count,
         solana_rpc::{
             optimistically_confirmed_bank_tracker::OptimisticallyConfirmedBank,
             rpc::{create_test_transaction_entries, populate_blockstore_for_tests},
@@ -3630,7 +3657,9 @@ pub mod tests {
         let missing_keypair = Keypair::new();
         let missing_keypair2 = Keypair::new();
 
-        let res = check_dead_fork(|_keypair, bank| {
+        let tx_executor = BankTransactionExecutor::new(get_thread_count());
+
+        let res = check_dead_fork(&tx_executor.handle(), |_keypair, bank| {
             let blockhash = bank.last_blockhash();
             let slot = bank.slot();
             let hashes_per_tick = bank.hashes_per_tick().unwrap_or(0);
@@ -3650,6 +3679,8 @@ pub mod tests {
             entries_to_test_shreds(&[entry], slot, slot.saturating_sub(1), false, 0)
         });
 
+        tx_executor.join().unwrap();
+
         assert_matches!(
             res,
             Err(BlockstoreProcessorError::InvalidTransaction(
@@ -3661,7 +3692,10 @@ pub mod tests {
     #[test]
     fn test_dead_fork_entry_verification_failure() {
         let keypair2 = Keypair::new();
-        let res = check_dead_fork(|genesis_keypair, bank| {
+
+        let tx_executor = BankTransactionExecutor::new(get_thread_count());
+
+        let res = check_dead_fork(&tx_executor.handle(), |genesis_keypair, bank| {
             let blockhash = bank.last_blockhash();
             let slot = bank.slot();
             let bad_hash = hash(&[2; 30]);
@@ -3680,6 +3714,8 @@ pub mod tests {
             entries_to_test_shreds(&[entry], slot, slot.saturating_sub(1), false, 0)
         });
 
+        tx_executor.join().unwrap();
+
         if let Err(BlockstoreProcessorError::InvalidBlock(block_error)) = res {
             assert_eq!(block_error, BlockError::InvalidEntryHash);
         } else {
@@ -3689,7 +3725,9 @@ pub mod tests {
 
     #[test]
     fn test_dead_fork_invalid_tick_hash_count() {
-        let res = check_dead_fork(|_keypair, bank| {
+        let tx_executor = BankTransactionExecutor::new(get_thread_count());
+
+        let res = check_dead_fork(&tx_executor.handle(), |_keypair, bank| {
             let blockhash = bank.last_blockhash();
             let slot = bank.slot();
             let hashes_per_tick = bank.hashes_per_tick().unwrap_or(0);
@@ -3705,6 +3743,8 @@ pub mod tests {
             )
         });
 
+        tx_executor.join().unwrap();
+
         if let Err(BlockstoreProcessorError::InvalidBlock(block_error)) = res {
             assert_eq!(block_error, BlockError::InvalidTickHashCount);
         } else {
@@ -3715,8 +3755,11 @@ pub mod tests {
     #[test]
     fn test_dead_fork_invalid_slot_tick_count() {
         solana_logger::setup();
+
+        let tx_executor = BankTransactionExecutor::new(get_thread_count());
+
         // Too many ticks per slot
-        let res = check_dead_fork(|_keypair, bank| {
+        let res = check_dead_fork(&tx_executor.handle(), |_keypair, bank| {
             let blockhash = bank.last_blockhash();
             let slot = bank.slot();
             let hashes_per_tick = bank.hashes_per_tick().unwrap_or(0);
@@ -3736,7 +3779,7 @@ pub mod tests {
         }
 
         // Too few ticks per slot
-        let res = check_dead_fork(|_keypair, bank| {
+        let res = check_dead_fork(&tx_executor.handle(), |_keypair, bank| {
             let blockhash = bank.last_blockhash();
             let slot = bank.slot();
             let hashes_per_tick = bank.hashes_per_tick().unwrap_or(0);
@@ -3749,6 +3792,8 @@ pub mod tests {
             )
         });
 
+        tx_executor.join().unwrap();
+
         if let Err(BlockstoreProcessorError::InvalidBlock(block_error)) = res {
             assert_eq!(block_error, BlockError::TooFewTicks);
         } else {
@@ -3758,7 +3803,9 @@ pub mod tests {
 
     #[test]
     fn test_dead_fork_invalid_last_tick() {
-        let res = check_dead_fork(|_keypair, bank| {
+        let tx_executor = BankTransactionExecutor::new(get_thread_count());
+
+        let res = check_dead_fork(&tx_executor.handle(), |_keypair, bank| {
             let blockhash = bank.last_blockhash();
             let slot = bank.slot();
             let hashes_per_tick = bank.hashes_per_tick().unwrap_or(0);
@@ -3771,6 +3818,8 @@ pub mod tests {
             )
         });
 
+        tx_executor.join().unwrap();
+
         if let Err(BlockstoreProcessorError::InvalidBlock(block_error)) = res {
             assert_eq!(block_error, BlockError::InvalidLastTick);
         } else {
@@ -3781,7 +3830,10 @@ pub mod tests {
     #[test]
     fn test_dead_fork_trailing_entry() {
         let keypair = Keypair::new();
-        let res = check_dead_fork(|funded_keypair, bank| {
+
+        let tx_executor = BankTransactionExecutor::new(get_thread_count());
+
+        let res = check_dead_fork(&tx_executor.handle(), |funded_keypair, bank| {
             let blockhash = bank.last_blockhash();
             let slot = bank.slot();
             let hashes_per_tick = bank.hashes_per_tick().unwrap_or(0);
@@ -3794,6 +3846,8 @@ pub mod tests {
             entries_to_test_shreds(&entries, slot, slot.saturating_sub(1), true, 0)
         });
 
+        tx_executor.join().unwrap();
+
         if let Err(BlockstoreProcessorError::InvalidBlock(block_error)) = res {
             assert_eq!(block_error, BlockError::TrailingEntry);
         } else {
@@ -3803,8 +3857,10 @@ pub mod tests {
 
     #[test]
     fn test_dead_fork_entry_deserialize_failure() {
+        let tx_executor = BankTransactionExecutor::new(get_thread_count());
+
         // Insert entry that causes deserialization failure
-        let res = check_dead_fork(|_, bank| {
+        let res = check_dead_fork(&tx_executor.handle(), |_, bank| {
             let gibberish = [0xa5u8; PACKET_DATA_SIZE];
             let mut data_header = DataShredHeader::default();
             data_header.flags |= DATA_COMPLETE_SHRED;
@@ -3828,6 +3884,8 @@ pub mod tests {
             vec![shred]
         });
 
+        tx_executor.join().unwrap();
+
         assert_matches!(
             res,
             Err(BlockstoreProcessorError::FailedToLoadEntries(
@@ -3838,7 +3896,10 @@ pub mod tests {
 
     // Given a shred and a fatal expected error, check that replaying that shred causes causes the fork to be
     // marked as dead. Returns the error for caller to verify.
-    fn check_dead_fork<F>(shred_to_insert: F) -> result::Result<(), BlockstoreProcessorError>
+    fn check_dead_fork<F>(
+        executor_handle: &BankTransactionExecutorHandle,
+        shred_to_insert: F,
+    ) -> result::Result<(), BlockstoreProcessorError>
     where
         F: Fn(&Keypair, Arc<Bank>) -> Vec<Shred>,
     {
@@ -3882,6 +3943,8 @@ pub mod tests {
                 &replay_vote_sender,
                 None,
                 &VerifyRecyclers::default(),
+                executor_handle,
+                &Duration::from_millis(400),
             );
             let max_complete_transaction_status_slot = Arc::new(AtomicU64::default());
             let rpc_subscriptions = Arc::new(RpcSubscriptions::new_for_tests(
