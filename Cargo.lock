@@ -5135,6 +5135,12 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "2a30f10c911c0355f80f1c2faa8096efc4a58cdf8590b954d5b395efa071c711"
 
 [[package]]
+name = "siphasher"
+version = "1.0.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "54ac45299ccbd390721be55b412d41931911f654fa99e2cb8bfb57184b2061fe"
+
+[[package]]
 name = "sized-chunks"
 version = "0.6.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -6862,6 +6868,7 @@ version = "1.16.19"
 dependencies = [
  "arrayref",
  "assert_matches",
+ "base64 0.21.2",
  "bincode",
  "blake3",
  "bv",
@@ -6899,6 +6906,8 @@ dependencies = [
  "rustc_version 0.4.0",
  "serde",
  "serde_derive",
+ "serde_json",
+ "siphasher",
  "solana-address-lookup-table-program",
  "solana-bpf-loader-program",
  "solana-bucket-map",
@@ -6916,6 +6925,7 @@ dependencies = [
  "solana-sdk",
  "solana-stake-program",
  "solana-system-program",
+ "solana-version",
  "solana-vote-program",
  "solana-zk-token-proof-program",
  "solana-zk-token-sdk",
