@@ -296,7 +296,7 @@ pub struct TransactionResults {
     pub rent_debits: Vec<RentDebits>,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct TransactionExecutionDetails {
     pub status: Result<()>,
     pub log_messages: Option<Vec<String>>,
@@ -319,11 +319,13 @@ pub struct TransactionExecutionDetails {
 /// is what should be checked to detect a successful transaction. This
 /// enum provides a convenience method `Self::was_executed_successfully` to
 /// make such checks hard to do incorrectly.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Deserialize, Serialize)]
 pub enum TransactionExecutionResult {
     Executed {
         details: TransactionExecutionDetails,
+        #[serde(skip)]
         programs_modified_by_tx: Box<LoadedProgramsForTxBatch>,
+        #[serde(skip)]
         programs_updated_only_for_global_cache: Box<LoadedProgramsForTxBatch>,
     },
     NotExecuted(TransactionError),
@@ -377,7 +379,7 @@ pub struct LoadAndExecuteTransactionsOutput {
     pub error_counters: TransactionErrorMetrics,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Deserialize, Serialize)]
 pub enum DurableNonceFee {
     Valid(u64),
     Invalid,
@@ -401,27 +403,10 @@ impl DurableNonceFee {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
-pub enum BundleSimulationSummary {
-    // error and transaction signature responsible
-    Failed {
-        error: (), //BundleExecutionError,
-        tx_signature: Signature,
-    },
-    Succeeded,
-}
-
 #[derive(Clone, Debug, PartialEq)]
 pub struct AccountData {
     pub pubkey: Pubkey,
     pub data: AccountSharedData,
-}
-
-#[derive(Clone)]
-pub struct BundleSimulationResult {
-    /// Gives high level summary of bundle.
-    pub summary: (), //BundleSimulationSummary,
-    pub transaction_results: Vec<BundleTransactionSimulationResult>,
 }
 
 #[derive(Clone)]
