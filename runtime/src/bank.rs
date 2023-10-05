@@ -447,7 +447,7 @@ pub type TransactionBalances = Vec<Vec<u64>>;
 /// transaction instruction
 pub type InnerInstructions = Vec<InnerInstruction>;
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct InnerInstruction {
     pub instruction: CompiledInstruction,
     /// Invocation stack height of this instruction. Instruction stack height
