@@ -1,9 +1,7 @@
 use {
     crate::{
         banking_stage::{BankingStageStats, FilterForwardingResults, ForwardOption},
-        bundle_stage::{
-            bundle_stage_leader_metrics::BundleStageLeaderMetrics, result::BundleExecutionError,
-        },
+        bundle_stage::bundle_stage_leader_metrics::BundleStageLeaderMetrics,
         forward_packet_batches_by_accounts::ForwardPacketBatchesByAccounts,
         immutable_deserialized_bundle::ImmutableDeserializedBundle,
         immutable_deserialized_packet::ImmutableDeserializedPacket,
@@ -17,22 +15,11 @@ use {
         unprocessed_packet_batches::{
             DeserializedPacket, PacketBatchInsertionMetrics, UnprocessedPacketBatches,
         },
-<<<<<<< HEAD:core/src/unprocessed_transaction_storage.rs
-    },
-    itertools::Itertools,
-    min_max_heap::MinMaxHeap,
-=======
         BankingStageStats, FilterForwardingResults, ForwardOption,
     },
-    crate::{
-        bundle_stage::bundle_stage_leader_metrics::BundleStageLeaderMetrics,
-        immutable_deserialized_bundle::ImmutableDeserializedBundle,
-    },
     itertools::Itertools,
     min_max_heap::MinMaxHeap,
-    solana_accounts_db::transaction_error_metrics::TransactionErrorMetrics,
     solana_bundle::BundleExecutionError,
->>>>>>> 9752473fbc (fix simulate_bundle breaking change):core/src/banking_stage/unprocessed_transaction_storage.rs
     solana_measure::measure,
     solana_runtime::{bank::Bank, transaction_error_metrics::TransactionErrorMetrics},
     solana_sdk::{
