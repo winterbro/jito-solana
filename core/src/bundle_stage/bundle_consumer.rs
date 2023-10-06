@@ -13,9 +13,9 @@ use {
         leader_slot_banking_stage_timing_metrics::LeaderExecuteAndCommitTimings,
         proxy::block_engine_stage::BlockBuilderFeeInfo,
         qos_service::QosService,
+        tip_manager::TipManager,
         unprocessed_transaction_storage::UnprocessedTransactionStorage,
     },
-    solana_accounts_db::transaction_error_metrics::TransactionErrorMetrics,
     solana_bundle::{
         bundle_execution::{load_and_execute_bundle, BundleExecutionMetrics},
         BundleExecutionError, BundleExecutionResult, TipError,
@@ -38,7 +38,6 @@ use {
         sync::{Arc, Mutex},
         time::{Duration, Instant},
     },
-    tip_manager::TipManager,
 };
 
 pub struct ExecuteRecordCommitResult {
