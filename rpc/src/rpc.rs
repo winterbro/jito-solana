@@ -3805,7 +3805,7 @@ pub mod rpc_full {
                 commitment: preflight_commitment,
                 min_context_slot,
             })?;
-            let transaction = sanitize_transaction(unsanitized_tx, preflight_bank)?;
+            let transaction = sanitize_transaction(unsanitized_tx, preflight_bank.as_ref())?;
             let signature = *transaction.signature();
 
             let mut last_valid_block_height = preflight_bank
@@ -3924,7 +3924,7 @@ pub mod rpc_full {
                     .set_recent_blockhash(bank.last_blockhash());
             }
 
-            let transaction = sanitize_transaction(unsanitized_tx, bank)?;
+            let transaction = sanitize_transaction(unsanitized_tx, bank.as_ref())?;
             if sig_verify {
                 verify_transaction(&transaction, &bank.feature_set)?;
             }
@@ -3980,7 +3980,7 @@ pub mod rpc_full {
             };
 
             Ok(new_response(
-                bank,
+                bank.as_ref(),
                 RpcSimulateTransactionResult {
                     err: result.err(),
                     logs: Some(logs),
@@ -4303,12 +4303,12 @@ pub mod rpc_full {
                 .map_err(|err| {
                     Error::invalid_params(format!("invalid transaction message: {err}"))
                 })?;
-            let sanitized_message = SanitizedMessage::try_new(sanitized_versioned_message, bank)
-                .map_err(|err| {
-                    Error::invalid_params(format!("invalid transaction message: {err}"))
-                })?;
+            let sanitized_message =
+                SanitizedMessage::try_new(sanitized_versioned_message, bank.as_ref()).map_err(
+                    |err| Error::invalid_params(format!("invalid transaction message: {err}")),
+                )?;
             let fee = bank.get_fee_for_message(&sanitized_message);
-            Ok(new_response(bank, fee))
+            Ok(new_response(bank.as_ref(), fee))
         }
 
         fn get_stake_minimum_delegation(
