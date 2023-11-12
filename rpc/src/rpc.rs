@@ -3801,7 +3801,7 @@ pub mod rpc_full {
 
             let preflight_commitment =
                 preflight_commitment.map(|commitment| CommitmentConfig { commitment });
-            let preflight_bank = &*meta.get_bank_with_config(RpcContextConfig {
+            let preflight_bank = meta.get_bank_with_config(RpcContextConfig {
                 commitment: preflight_commitment,
                 min_context_slot,
             })?;
@@ -3909,7 +3909,7 @@ pub mod rpc_full {
             let (_, mut unsanitized_tx) =
                 decode_and_deserialize::<VersionedTransaction>(data, binary_encoding)?;
 
-            let bank = &*meta.get_bank_with_config(RpcContextConfig {
+            let bank = meta.get_bank_with_config(RpcContextConfig {
                 commitment,
                 min_context_slot,
             })?;
@@ -4298,7 +4298,7 @@ pub mod rpc_full {
                 data,
                 TransactionBinaryEncoding::Base64,
             )?;
-            let bank = &*meta.get_bank_with_config(config.unwrap_or_default())?;
+            let bank = meta.get_bank_with_config(config.unwrap_or_default())?;
             let sanitized_versioned_message = SanitizedVersionedMessage::try_from(message)
                 .map_err(|err| {
                     Error::invalid_params(format!("invalid transaction message: {err}"))
