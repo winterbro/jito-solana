@@ -248,6 +248,8 @@ impl JsonRpcRequestProcessor {
             return bank;
         }
 
+        let r_bank_forks = self.bank_forks.read().unwrap();
+
         let slot = self
             .block_commitment_cache
             .read()
@@ -274,7 +276,6 @@ impl JsonRpcRequestProcessor {
             CommitmentLevel::SingleGossip | CommitmentLevel::Confirmed => unreachable!(), // SingleGossip variant is deprecated
         };
 
-        let r_bank_forks = self.bank_forks.read().unwrap();
         r_bank_forks.get(slot).unwrap_or_else(|| {
             // We log a warning instead of returning an error, because all known error cases
             // are due to known bugs that should be fixed instead.
