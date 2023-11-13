@@ -3697,7 +3697,9 @@ impl Bank {
         let mut account_locks = AccountLocks::default();
         let lock_results =
             Accounts::lock_accounts_sequential(&mut account_locks, tx_account_locks_results);
-        TransactionBatch::new(lock_results, self, Cow::Borrowed(transactions))
+        let mut batch = TransactionBatch::new(lock_results, self, Cow::Borrowed(transactions));
+        batch.set_needs_unlock(false);
+        batch
     }
 
     /// Prepare a transaction batch without locking accounts for transaction simulation.
