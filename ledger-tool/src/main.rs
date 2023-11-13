@@ -2601,7 +2601,7 @@ fn main() {
                     ..ProcessOptions::default()
                 };
                 let print_accounts_stats = arg_matches.is_present("print_accounts_stats");
-                let write_bank_file = true; //arg_matches.is_present("write_bank_file");
+                let write_bank_file = arg_matches.is_present("write_bank_file");
                 let genesis_config = open_genesis_config_by(&ledger_path, arg_matches);
                 info!("genesis hash: {}", genesis_config.hash());
 
