@@ -5211,10 +5211,12 @@ impl Bank {
         account_overrides: Option<&AccountOverrides>,
         log_messages_bytes_limit: Option<usize>,
     ) -> LoadAndExecuteTransactionsOutput {
+        info!("bbb 1");
         let sanitized_txs = batch.sanitized_transactions();
         debug!("processing transactions: {}", sanitized_txs.len());
         let mut error_counters = TransactionErrorMetrics::default();
 
+        info!("bbb 2");
         let retryable_transaction_indexes: Vec<_> = batch
             .lock_results()
             .iter()
@@ -5251,6 +5253,7 @@ impl Bank {
             })
             .collect();
 
+        info!("bbb 3");
         let mut check_time = Measure::start("check_transactions");
         let mut check_results = self.check_transactions(
             sanitized_txs,
@@ -5260,6 +5263,7 @@ impl Bank {
         );
         check_time.stop();
 
+        info!("bbb 4");
         const PROGRAM_OWNERS: &[Pubkey] = &[
             bpf_loader_upgradeable::id(),
             bpf_loader::id(),
@@ -5281,6 +5285,7 @@ impl Bank {
         let programs_loaded_for_tx_batch = Rc::new(RefCell::new(
             self.replenish_program_cache(&program_accounts_map),
         ));
+        info!("bbb 5");
 
         let mut load_time = Measure::start("accounts_load");
         let mut loaded_transactions = self.rc.accounts.load_accounts(
@@ -5375,6 +5380,7 @@ impl Bank {
 
         execution_time.stop();
 
+        info!("bbb 6");
         const SHRINK_LOADED_PROGRAMS_TO_PERCENTAGE: u8 = 90;
         self.loaded_programs_cache
             .write()
@@ -5471,6 +5477,7 @@ impl Bank {
                 }
             }
 
+            info!("bbb 7");
             if execution_result.was_executed() {
                 // Signature count must be accumulated only if the transaction
                 // is executed, otherwise a mismatched count between banking and
@@ -5498,6 +5505,7 @@ impl Bank {
         timings
             .saturating_add_in_place(ExecuteTimingType::CollectLogsUs, collect_logs_time.as_us());
 
+        info!("bbb 8");
         if *err_count > 0 {
             debug!(
                 "{} errors of {} txs",
