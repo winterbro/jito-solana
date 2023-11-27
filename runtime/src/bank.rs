@@ -5304,6 +5304,7 @@ impl Bank {
         );
         load_time.stop();
 
+        info!("bbb 5.1");
         let mut execution_time = Measure::start("execution_time");
         let mut signature_count: u64 = 0;
 
@@ -5321,6 +5322,7 @@ impl Bank {
                         let mut compute_budget =
                             ComputeBudget::new(compute_budget::MAX_COMPUTE_UNIT_LIMIT as u64);
 
+                        info!("bbb 5.2");
                         let mut compute_budget_process_transaction_time =
                             Measure::start("compute_budget_process_transaction_time");
                         let process_transaction_result = compute_budget.process_instructions(
@@ -5358,6 +5360,7 @@ impl Bank {
                         &programs_loaded_for_tx_batch.borrow(),
                     );
 
+                    info!("bbb 5.3");
                     if let TransactionExecutionResult::Executed {
                         details,
                         programs_modified_by_tx,
