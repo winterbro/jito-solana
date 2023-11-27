@@ -242,6 +242,7 @@ pub fn load_and_execute_bundle<'a>(
     pre_execution_accounts: &Vec<Option<Vec<Pubkey>>>,
     post_execution_accounts: &Vec<Option<Vec<Pubkey>>>,
 ) -> LoadAndExecuteBundleOutput<'a> {
+    info!("aaaa 1");
     if pre_execution_accounts.len() != post_execution_accounts.len()
         || post_execution_accounts.len() != bundle.transactions.len()
     {
@@ -251,8 +252,10 @@ pub fn load_and_execute_bundle<'a>(
             metrics: BundleExecutionMetrics::default(),
         };
     }
+    info!("aaaa 2");
     let mut binding = AccountOverrides::default();
     let account_overrides = account_overrides.unwrap_or(&mut binding);
+    info!("aaaa 3");
 
     let mut chunk_start = 0;
     let start_time = Instant::now();
@@ -260,7 +263,9 @@ pub fn load_and_execute_bundle<'a>(
     let mut bundle_transaction_results = vec![];
     let mut metrics = BundleExecutionMetrics::default();
 
+    info!("aaaa 4");
     while chunk_start != bundle.transactions.len() {
+        info!("aaaa 5");
         if start_time.elapsed() > *max_processing_time {
             trace!("bundle: {} took too long to execute", bundle.bundle_id);
             return LoadAndExecuteBundleOutput {
@@ -275,6 +280,7 @@ pub fn load_and_execute_bundle<'a>(
         let chunk_end = min(bundle.transactions.len(), chunk_start.saturating_add(128));
         let chunk = &bundle.transactions[chunk_start..chunk_end];
 
+        info!("aaaa 6");
         // Note: these batches are dropped after execution and before record/commit, which is atypical
         // compared to BankingStage which holds account locks until record + commit to avoid race conditions with
         // other BankingStage threads. However, the caller of this method, BundleConsumer, will use BundleAccountLocks
@@ -284,6 +290,8 @@ pub fn load_and_execute_bundle<'a>(
         } else {
             bank.prepare_sequential_sanitized_batch_with_results(chunk)
         };
+
+        info!("aaaa 7");
 
         debug!(
             "bundle: {} batch num locks ok: {}",
@@ -295,6 +303,7 @@ pub fn load_and_execute_bundle<'a>(
         // Ok(()) | Err(TransactionError::AccountInUse)
         // If the error isn't one of those, then error out
         if let Some((transaction, lock_failure)) = batch.check_bundle_lock_results() {
+            info!("aaaa 7.5");
             debug!(
                 "bundle: {} lock error; signature: {} error: {}",
                 bundle.bundle_id,
@@ -310,6 +319,7 @@ pub fn load_and_execute_bundle<'a>(
                 }),
             };
         }
+        info!("aaaa 8");
 
         let mut pre_balance_info = PreBalanceInfo::default();
         let (_, collect_balances_us) = measure_us!({
@@ -324,6 +334,7 @@ pub fn load_and_execute_bundle<'a>(
                 );
             }
         });
+        info!("aaaa 9");
         saturating_add_assign!(metrics.collect_balances_us, collect_balances_us);
 
         let end = min(
@@ -331,12 +342,14 @@ pub fn load_and_execute_bundle<'a>(
             pre_execution_accounts.len(),
         );
 
+        info!("aaaa 10");
         let m = Measure::start("accounts");
         let accounts_requested = &pre_execution_accounts[chunk_start..end];
         let pre_tx_execution_accounts =
             get_account_transactions(bank, account_overrides, accounts_requested, &batch);
         saturating_add_assign!(metrics.collect_pre_post_accounts_us, m.end_as_us());
 
+        info!("aaaa 11");
         let (mut load_and_execute_transactions_output, load_execute_us) = measure_us!(bank
             .load_and_execute_transactions(
                 &batch,
@@ -353,6 +366,7 @@ pub fn load_and_execute_bundle<'a>(
             bundle.bundle_id, load_and_execute_transactions_output.loaded_transactions
         );
         saturating_add_assign!(metrics.load_execute_us, load_execute_us);
+        info!("aaaa 12");
 
         // All transactions within a bundle are expected to be executable + not fail
         // If there's any transactions that executed and failed or didn't execute due to
@@ -383,6 +397,7 @@ pub fn load_and_execute_bundle<'a>(
                 }),
             };
         }
+        info!("aaaa 13");
 
         // If none of the transactions were executed, most likely an AccountInUse error
         // need to retry to ensure that all transactions in the bundle are executed.
@@ -399,6 +414,7 @@ pub fn load_and_execute_bundle<'a>(
             continue;
         }
 
+        info!("aaaa 14");
         // Cache accounts so next iterations of loop can load cached state instead of using
         // AccountsDB, which will contain stale account state because results aren't committed
         // to the bank yet.
@@ -426,6 +442,7 @@ pub fn load_and_execute_bundle<'a>(
             get_account_transactions(bank, account_overrides, accounts_requested, &batch);
         saturating_add_assign!(metrics.collect_pre_post_accounts_us, m.end_as_us());
 
+        info!("aaaa 15");
         let ((post_balances, post_token_balances), collect_balances_us) =
             measure_us!(if enable_balance_recording {
                 let post_balances =
@@ -452,6 +469,7 @@ pub fn load_and_execute_bundle<'a>(
             chunk_start = chunk_end;
         }
 
+        info!("aaaa 16");
         bundle_transaction_results.push(BundleTransactionsOutput {
             transactions: chunk,
             load_and_execute_transactions_output,
@@ -462,6 +480,7 @@ pub fn load_and_execute_bundle<'a>(
         });
     }
 
+    info!("aaaa 17");
     LoadAndExecuteBundleOutput {
         bundle_transaction_results,
         metrics,
