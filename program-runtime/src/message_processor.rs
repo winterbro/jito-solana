@@ -7,6 +7,7 @@ use {
         sysvar_cache::SysvarCache,
         timings::{ExecuteDetailsTimings, ExecuteTimings},
     },
+    log::info,
     serde::{Deserialize, Serialize},
     solana_measure::measure::Measure,
     solana_sdk::{
@@ -68,6 +69,7 @@ impl MessageProcessor {
         current_accounts_data_len: u64,
         accumulated_consumed_units: &mut u64,
     ) -> Result<ProcessedMessageInfo, TransactionError> {
+        info!("ddd 1");
         let mut invoke_context = InvokeContext::new(
             transaction_context,
             rent,
@@ -83,12 +85,14 @@ impl MessageProcessor {
             current_accounts_data_len,
         );
 
+        info!("ddd 2");
         debug_assert_eq!(program_indices.len(), message.instructions().len());
         for (instruction_index, ((program_id, instruction), program_indices)) in message
             .program_instructions_iter()
             .zip(program_indices.iter())
             .enumerate()
         {
+            info!("ddd 3");
             let is_precompile =
                 is_precompile(program_id, |id| invoke_context.feature_set.is_active(id));
 
@@ -98,6 +102,7 @@ impl MessageProcessor {
                 .transaction_context
                 .find_index_of_account(&instructions::id())
             {
+                info!("ddd 3.1");
                 let mut mut_account_ref = invoke_context
                     .transaction_context
                     .get_account_at_index(account_index)
@@ -108,11 +113,13 @@ impl MessageProcessor {
                     instruction_index as u16,
                 );
             }
+            info!("ddd 4");
 
             let mut instruction_accounts = Vec::with_capacity(instruction.accounts.len());
             for (instruction_account_index, index_in_transaction) in
                 instruction.accounts.iter().enumerate()
             {
+                info!("ddd 5");
                 let index_in_callee = instruction
                     .accounts
                     .get(0..instruction_account_index)
@@ -122,6 +129,7 @@ impl MessageProcessor {
                     .unwrap_or(instruction_account_index)
                     as IndexOfAccount;
                 let index_in_transaction = *index_in_transaction as usize;
+                info!("ddd 6");
                 instruction_accounts.push(InstructionAccount {
                     index_in_transaction: index_in_transaction as IndexOfAccount,
                     index_in_caller: index_in_transaction as IndexOfAccount,
@@ -131,7 +139,9 @@ impl MessageProcessor {
                 });
             }
 
+            info!("ddd 7");
             let result = if is_precompile {
+                info!("ddd 7.1");
                 invoke_context
                     .transaction_context
                     .get_next_instruction_context()
@@ -147,8 +157,10 @@ impl MessageProcessor {
                         invoke_context.transaction_context.pop()
                     })
             } else {
+                info!("ddd 7.2");
                 let mut time = Measure::start("execute_instruction");
                 let mut compute_units_consumed = 0;
+                info!("ddd 7.3");
                 let result = invoke_context.process_instruction(
                     &instruction.data,
                     &instruction_accounts,
@@ -156,6 +168,7 @@ impl MessageProcessor {
                     &mut compute_units_consumed,
                     timings,
                 );
+                info!("ddd 7.4");
                 time.stop();
                 *accumulated_consumed_units =
                     accumulated_consumed_units.saturating_add(compute_units_consumed);
@@ -165,6 +178,7 @@ impl MessageProcessor {
                     compute_units_consumed,
                     result.is_err(),
                 );
+                info!("ddd 7.5");
                 invoke_context.timings = {
                     timings.details.accumulate(&invoke_context.timings);
                     ExecuteDetailsTimings::default()
