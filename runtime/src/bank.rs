@@ -5333,6 +5333,7 @@ impl Bank {
                             self.feature_set
                                 .is_active(&add_set_tx_loaded_accounts_data_size_instruction::id()),
                         );
+                        info!("bbb 5.3");
                         compute_budget_process_transaction_time.stop();
                         saturating_add_assign!(
                             timings
@@ -5341,11 +5342,13 @@ impl Bank {
                             compute_budget_process_transaction_time.as_us()
                         );
                         if let Err(err) = process_transaction_result {
+                            info!("bbb 5.31");
                             return TransactionExecutionResult::NotExecuted(err);
                         }
                         compute_budget
                     };
 
+                    info!("bbb 5.4");
                     let result = self.execute_loaded_transaction(
                         tx,
                         loaded_transaction,
@@ -5359,8 +5362,7 @@ impl Bank {
                         log_messages_bytes_limit,
                         &programs_loaded_for_tx_batch.borrow(),
                     );
-
-                    info!("bbb 5.3");
+                    info!("bbb 5.5");
                     if let TransactionExecutionResult::Executed {
                         details,
                         programs_modified_by_tx,
