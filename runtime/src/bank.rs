@@ -4926,6 +4926,7 @@ impl Bank {
         log_messages_bytes_limit: Option<usize>,
         programs_loaded_for_tx_batch: &LoadedProgramsForTxBatch,
     ) -> TransactionExecutionResult {
+        info!("ccc 1");
         let prev_accounts_data_len = self.load_accounts_data_size();
         let transaction_accounts = std::mem::take(&mut loaded_transaction.accounts);
 
@@ -4942,6 +4943,7 @@ impl Bank {
             }
             Some(lamports_sum)
         }
+        info!("ccc 2");
 
         let lamports_before_tx =
             transaction_accounts_lamports_sum(&transaction_accounts, tx.message()).unwrap_or(0);
@@ -4966,6 +4968,7 @@ impl Bank {
                 std::usize::MAX
             },
         );
+        info!("ccc 3");
         if self
             .feature_set
             .is_active(&feature_set::cap_accounts_data_allocations_per_transaction::id())
@@ -4975,6 +4978,7 @@ impl Bank {
         #[cfg(debug_assertions)]
         transaction_context.set_signature(tx.signature());
 
+        info!("ccc 4");
         let pre_account_state_info =
             self.get_transaction_account_state_info(&transaction_context, tx.message());
 
@@ -4989,6 +4993,7 @@ impl Bank {
             None
         };
 
+        info!("ccc 5");
         let (blockhash, lamports_per_signature) = self.last_blockhash_and_lamports_per_signature();
 
         let mut executed_units = 0u64;
@@ -5019,6 +5024,7 @@ impl Bank {
             prev_accounts_data_len,
             &mut executed_units,
         );
+        info!("ccc 6");
         process_message_time.stop();
 
         saturating_add_assign!(
@@ -5053,6 +5059,7 @@ impl Bank {
                 err
             });
 
+        info!("ccc 7");
         let log_messages: Option<TransactionLogMessages> =
             log_collector.and_then(|log_collector| {
                 Rc::try_unwrap(log_collector)
@@ -5060,6 +5067,7 @@ impl Bank {
                     .ok()
             });
 
+        info!("ccc 8");
         let inner_instructions = if enable_cpi_recording {
             Some(inner_instructions_list_from_instruction_trace(
                 &transaction_context,
@@ -5082,6 +5090,7 @@ impl Bank {
         {
             status = Err(TransactionError::UnbalancedTransaction);
         }
+        info!("ccc 9");
         let mut accounts_data_len_delta = status
             .as_ref()
             .map_or(0, |info| info.accounts_data_len_delta);
@@ -5106,6 +5115,7 @@ impl Bank {
             None
         };
 
+        info!("ccc 10");
         TransactionExecutionResult::Executed {
             details: TransactionExecutionDetails {
                 status,
