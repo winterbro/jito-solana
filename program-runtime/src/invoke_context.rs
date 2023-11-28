@@ -10,6 +10,7 @@ use {
         sysvar_cache::SysvarCache,
         timings::{ExecuteDetailsTimings, ExecuteTimings},
     },
+    log::info,
     solana_measure::measure::Measure,
     solana_rbpf::{
         ebpf::MM_HEAP_START,
@@ -662,6 +663,7 @@ impl<'a> InvokeContext<'a> {
         compute_units_consumed: &mut u64,
         timings: &mut ExecuteTimings,
     ) -> Result<(), InstructionError> {
+        info!("eee 1");
         *compute_units_consumed = 0;
 
         let nesting_level = self
@@ -686,19 +688,24 @@ impl<'a> InvokeContext<'a> {
             );
             verify_caller_result?;
         }
+        info!("eee 2");
 
         self.transaction_context
             .get_next_instruction_context()?
             .configure(program_indices, instruction_accounts, instruction_data);
+        info!("eee 3");
         self.push()?;
+        info!("eee 4");
         self.process_executable_chain(compute_units_consumed, timings)
             .and_then(|_| {
                 if self
                     .feature_set
                     .is_active(&enable_early_verification_of_account_modifications::id())
                 {
+                    info!("eee 5");
                     Ok(())
                 } else {
+                    info!("eee 6");
                     // Verify the called program has not misbehaved
                     let mut verify_callee_time = Measure::start("verify_callee_time");
                     let result = if is_top_level_instruction {
