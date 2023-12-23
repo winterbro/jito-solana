@@ -17,6 +17,7 @@ use {
     solana_sdk::{
         account::Account,
         commitment_config::CommitmentConfig,
+        compute_budget::ComputeBudgetInstruction,
         instruction::Instruction,
         pubkey::Pubkey,
         signature::{Keypair, Signer},
@@ -397,7 +398,10 @@ fn build_transactions(
 
     let transactions = instructions
         .into_iter()
-        .map(|ix| Transaction::new_with_payer(&[ix], Some(payer_pubkey)))
+        .map(|claim_ix| {
+            let priority_fee_ix = ComputeBudgetInstruction::set_compute_unit_price(1);
+            Transaction::new_with_payer(&[priority_fee_ix, claim_ix], Some(payer_pubkey))
+        })
         .collect::<Vec<_>>();
     Ok((
         skipped_merkle_root_count,
