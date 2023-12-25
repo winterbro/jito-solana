@@ -798,7 +798,7 @@ mod tests {
 
         let mut curr_bank = bank;
         // retry until reached, but not exceeding max attempts
-        (1..BUNDLE_RETRY_ATTEMPTS + 1).for_each(|_i| {
+        (1..BUNDLE_RETRY_ATTEMPTS + 1).for_each(|i| {
             // advance the slot so we can evaluate cost_model_buffered_bundle_storage
             let new_bank = Arc::new(Bank::new_from_parent(
                 curr_bank.clone(),
@@ -832,6 +832,7 @@ mod tests {
                     .get_unprocessed_bundle_storage_len(),
                 0
             );
+            dbg!(i);
             assert_eq!(
                 unprocessed_transaction_storage
                     .bundle_storage()

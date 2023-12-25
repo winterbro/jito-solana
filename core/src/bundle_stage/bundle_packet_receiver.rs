@@ -134,28 +134,30 @@ impl BundleReceiver {
         bundle_stage_leader_metrics: &mut BundleStageLeaderMetrics,
         bundle_stage_stats: &mut BundleStageLoopMetrics,
     ) {
-        if !deserialized_bundles.is_empty() {
-            let insert_bundles_summary =
-                unprocessed_transaction_storage.insert_bundles(deserialized_bundles);
-
-            bundle_stage_stats.increment_newly_buffered_bundles_count(
-                insert_bundles_summary.num_bundles_inserted as u64,
-            );
-            bundle_stage_stats
-                .increment_num_bundles_dropped(insert_bundles_summary.num_bundles_dropped as u64);
-
-            bundle_stage_leader_metrics
-                .leader_slot_metrics_tracker()
-                .increment_newly_buffered_packets_count(
-                    insert_bundles_summary.num_packets_inserted as u64,
-                );
-
-            bundle_stage_leader_metrics
-                .leader_slot_metrics_tracker()
-                .accumulate_insert_packet_batches_summary(
-                    &insert_bundles_summary.insert_packets_summary,
-                );
+        if deserialized_bundles.is_empty() {
+            return;
         }
+
+        let insert_bundles_summary =
+            unprocessed_transaction_storage.insert_bundles(deserialized_bundles);
+
+        bundle_stage_stats.increment_newly_buffered_bundles_count(
+            insert_bundles_summary.num_bundles_inserted as u64,
+        );
+        bundle_stage_stats
+            .increment_num_bundles_dropped(insert_bundles_summary.num_bundles_dropped as u64);
+
+        bundle_stage_leader_metrics
+            .leader_slot_metrics_tracker()
+            .increment_newly_buffered_packets_count(
+                insert_bundles_summary.num_packets_inserted as u64,
+            );
+
+        bundle_stage_leader_metrics
+            .leader_slot_metrics_tracker()
+            .accumulate_insert_packet_batches_summary(
+                &insert_bundles_summary.insert_packets_summary,
+            );
     }
 }
 

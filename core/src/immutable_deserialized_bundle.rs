@@ -1,3 +1,5 @@
+use solana_cost_model::cost_model::CostModel;
+use solana_cost_model::cost_tracker::CostTracker;
 use {
     crate::{
         banking_stage::immutable_deserialized_packet::ImmutableDeserializedPacket,
@@ -8,7 +10,6 @@ use {
     solana_runtime::bank::Bank,
     solana_sdk::{
         bundle::SanitizedBundle, clock::MAX_PROCESSING_AGE, pubkey::Pubkey, signature::Signature,
-        transaction::SanitizedTransaction,
     },
     std::{
         collections::{hash_map::RandomState, HashSet},
@@ -48,6 +49,9 @@ pub enum DeserializedBundleError {
 
     #[error("Bundle failed check_transactions")]
     FailedCheckTransactions,
+
+    #[error("Bundle exceeded CostTracker limit")]
+    CostTrackerExceeded,
 }
 
 #[derive(Debug, PartialEq, Eq)]
@@ -119,16 +123,22 @@ impl ImmutableDeserializedBundle {
             return Err(DeserializedBundleError::VoteOnlyMode);
         }
 
-        let transactions: Vec<SanitizedTransaction> = self
-            .packets
-            .iter()
-            .filter_map(|p| {
-                p.build_sanitized_transaction(&bank.feature_set, bank.vote_only_bank(), bank)
-            })
-            .collect();
-
-        if self.packets.len() != transactions.len() {
-            return Err(DeserializedBundleError::FailedToSerializeTransaction);
+        let mut cost_tracker =
+            CostTracker::new_with_account_data_size_limit(Some(bank.accounts_data_size_limit()));
+        let mut transactions = Vec::with_capacity(self.packets.len());
+        for packet in self.packets.iter() {
+            let Some(txn) =
+                packet.build_sanitized_transaction(&bank.feature_set, bank.vote_only_bank(), bank)
+            else {
+                return Err(DeserializedBundleError::FailedToSerializeTransaction);
+            };
+            if cost_tracker
+                .try_add(&CostModel::calculate_cost(&txn, bank.feature_set.as_ref()))
+                .is_err()
+            {
+                return Err(DeserializedBundleError::CostTrackerExceeded);
+            }
+            transactions.push(txn);
         }
 
         let unique_signatures: HashSet<&Signature, RandomState> =

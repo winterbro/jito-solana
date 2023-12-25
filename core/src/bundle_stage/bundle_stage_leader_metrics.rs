@@ -202,6 +202,12 @@ impl BundleStageStatsMetricsTracker {
                             1
                         );
                     }
+                    DeserializedBundleError::CostTrackerExceeded => {
+                        saturating_add_assign!(
+                            bundle_stage_metrics.sanitize_transaction_failed_cost_tracker_exceeded,
+                            1
+                        );
+                    }
                 },
             }
         }
@@ -332,6 +338,7 @@ pub struct BundleStageStats {
     sanitize_transaction_failed_too_many_packets: u64,
     sanitize_transaction_failed_marked_discard: u64,
     sanitize_transaction_failed_sig_verify_failed: u64,
+    sanitize_transaction_failed_cost_tracker_exceeded: u64,
 
     locked_bundle_elapsed_us: u64,
 
@@ -434,6 +441,11 @@ impl BundleStageStats {
             (
                 "sanitize_transaction_failed_sig_verify_failed",
                 self.sanitize_transaction_failed_sig_verify_failed,
+                i64
+            ),
+            (
+                "sanitize_transaction_failed_cost_tracker_exceeded",
+                self.sanitize_transaction_failed_cost_tracker_exceeded,
                 i64
             ),
             (
