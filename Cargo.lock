@@ -76,9 +76,9 @@ dependencies = [
 
 [[package]]
 name = "ahash"
-version = "0.8.4"
+version = "0.8.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "72832d73be48bac96a5d7944568f305d829ed55b0ce3b483647089dfaf6cf704"
+checksum = "91429305e9f0a25f6205c5b8e0d2db09e0708a7a6df0f42212bb56c32c8ac97a"
 dependencies = [
  "cfg-if 1.0.0",
  "getrandom 0.2.10",
@@ -2540,7 +2540,7 @@ version = "0.13.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "43a3c133739dddd0d2990f9a4bdf8eb4b21ef50e4851ca85ab661199821d510e"
 dependencies = [
- "ahash 0.8.4",
+ "ahash 0.8.6",
 ]
 
 [[package]]
@@ -6283,7 +6283,7 @@ dependencies = [
 name = "solana-frozen-abi"
 version = "1.17.13"
 dependencies = [
- "ahash 0.8.4",
+ "ahash 0.8.6",
  "bitflags 2.3.3",
  "blake3",
  "block-buffer 0.10.4",
@@ -6777,7 +6777,7 @@ dependencies = [
 name = "solana-perf"
 version = "1.17.13"
 dependencies = [
- "ahash 0.8.4",
+ "ahash 0.8.6",
  "assert_matches",
  "bincode",
  "bv",
