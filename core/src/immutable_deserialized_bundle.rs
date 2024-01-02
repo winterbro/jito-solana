@@ -1,5 +1,6 @@
 use solana_cost_model::cost_model::CostModel;
 use solana_cost_model::cost_tracker::CostTracker;
+use solana_sdk::transaction::SanitizedTransaction;
 use {
     crate::{
         banking_stage::immutable_deserialized_packet::ImmutableDeserializedPacket,
@@ -123,23 +124,29 @@ impl ImmutableDeserializedBundle {
             return Err(DeserializedBundleError::VoteOnlyMode);
         }
 
+        // prune if bundle exceeds costs when no accumulated costs (most ideal case)
         let mut cost_tracker =
             CostTracker::new_with_account_data_size_limit(Some(bank.accounts_data_size_limit()));
-        let mut transactions = Vec::with_capacity(self.packets.len());
-        for packet in self.packets.iter() {
-            let Some(txn) =
-                packet.build_sanitized_transaction(&bank.feature_set, bank.vote_only_bank(), bank)
-            else {
-                return Err(DeserializedBundleError::FailedToSerializeTransaction);
-            };
-            if cost_tracker
-                .try_add(&CostModel::calculate_cost(&txn, bank.feature_set.as_ref()))
-                .is_err()
-            {
-                return Err(DeserializedBundleError::CostTrackerExceeded);
-            }
-            transactions.push(txn);
-        }
+        let transactions = self
+            .packets
+            .iter()
+            .map(|packet| {
+                let Some(txn) = packet.build_sanitized_transaction(
+                    &bank.feature_set,
+                    bank.vote_only_bank(),
+                    bank,
+                ) else {
+                    return Err(DeserializedBundleError::FailedToSerializeTransaction);
+                };
+                if cost_tracker
+                    .try_add(&CostModel::calculate_cost(&txn, bank.feature_set.as_ref()))
+                    .is_err()
+                {
+                    return Err(DeserializedBundleError::CostTrackerExceeded);
+                }
+                Ok(txn)
+            })
+            .collect::<Result<Vec<SanitizedTransaction>, DeserializedBundleError>>()?;
 
         let unique_signatures: HashSet<&Signature, RandomState> =
             HashSet::from_iter(transactions.iter().map(|tx| tx.signature()));

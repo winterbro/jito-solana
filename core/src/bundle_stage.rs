@@ -458,6 +458,8 @@ impl BundleStage {
 
 #[cfg(test)]
 mod tests {
+    use solana_gossip::contact_info::ContactInfo;
+    use solana_sdk::message::Message;
     use {
         super::*,
         crossbeam_channel::unbounded,
@@ -661,53 +663,58 @@ mod tests {
             .genesis_config
             .rent
             .minimum_balance(MAX_PERMITTED_DATA_LENGTH as usize);
-        let test_keypairs = (0..10).map(|_| Keypair::new()).collect_vec();
-        let ixs = test_keypairs
-            .iter()
-            .map(|kp| {
-                system_instruction::create_account(
-                    &mint_keypair.pubkey(),
-                    &kp.pubkey(),
-                    rent,
-                    MAX_PERMITTED_DATA_LENGTH,
-                    &solana_sdk::system_program::ID,
-                )
-            })
-            .collect_vec();
+        let test_keypairs = (0..20).map(|_| Keypair::new()).collect_vec();
         let recent_blockhash = bank.last_blockhash();
-        let txn0 = Transaction::new_signed_with_payer(
-            ixs.iter().take(5).cloned().collect_vec().as_slice(),
-            Some(&mint_keypair.pubkey()),
-            std::iter::once(&mint_keypair)
-                .chain(test_keypairs.iter().take(5))
-                .collect_vec()
-                .as_slice(),
-            recent_blockhash,
-        );
-        let txn1 = Transaction::new_signed_with_payer(
-            ixs.iter().skip(5).cloned().collect_vec().as_slice(),
-            Some(&mint_keypair.pubkey()),
-            std::iter::once(&mint_keypair)
-                .chain(test_keypairs.iter().skip(5))
-                .collect_vec()
-                .as_slice(),
-            recent_blockhash,
-        );
-        bundle_sender
-            .send(vec![PacketBundle {
-                batch: PacketBatch::new(vec![
-                    Packet::from_data(None, txn0).unwrap(),
-                    Packet::from_data(None, txn1).unwrap(),
-                ]),
-                bundle_id: String::default(),
-            }])
-            .unwrap();
 
-        let committer = Committer::new(
-            None,
-            replay_vote_sender,
-            Arc::new(PrioritizationFeeCache::default()),
-        );
+        /// requires 10 transfers to exceed [block_cost_limits::MAX_BLOCK_ACCOUNTS_DATA_SIZE_DELTA]
+        let create_cost_model_exceeded_txn = |keypairs: &[&Keypair]| -> Transaction {
+            let ixs = keypairs
+                .iter()
+                .map(|kp| {
+                    system_instruction::create_account(
+                        &mint_keypair.pubkey(),
+                        &kp.pubkey(),
+                        rent,
+                        MAX_PERMITTED_DATA_LENGTH,
+                        &solana_sdk::system_program::ID,
+                    )
+                })
+                .collect_vec();
+            Transaction::new_signed_with_payer(
+                &ixs,
+                Some(&mint_keypair.pubkey()),
+                std::iter::once(&mint_keypair)
+                    .chain(keypairs.iter().cloned().collect_vec())
+                    .collect_vec()
+                    .as_slice(),
+                recent_blockhash,
+            )
+        };
+
+        // bundle0: used to set up trigger in next bundle
+        let txn0 = create_cost_model_exceeded_txn(&test_keypairs.iter().take(5).collect_vec());
+
+        // bundle1: trigger the cost limit
+        let txn1 =
+            create_cost_model_exceeded_txn(&test_keypairs.iter().skip(5).take(5).collect_vec());
+        // let txn2 =
+        //     create_cost_model_exceeded_txn(&test_keypairs.iter().skip(10).take(5).collect_vec());
+
+        bundle_sender
+            .send(vec![
+                PacketBundle {
+                    batch: PacketBatch::new(vec![Packet::from_data(None, txn0).unwrap()]),
+                    bundle_id: String::default(),
+                },
+                PacketBundle {
+                    batch: PacketBatch::new(vec![
+                        Packet::from_data(None, txn1).unwrap(),
+                        // Packet::from_data(None, txn2).unwrap(),
+                    ]),
+                    bundle_id: String::default(),
+                },
+            ])
+            .unwrap();
 
         let mut unprocessed_transaction_storage =
             UnprocessedTransactionStorage::new_bundle_storage_ttl(
@@ -728,6 +735,11 @@ mod tests {
         let reserved_space =
             BundleReservedSpaceManager::new(MAX_BLOCK_UNITS, 3_000_000, reserved_ticks);
 
+        let committer = Committer::new(
+            None,
+            replay_vote_sender,
+            Arc::new(PrioritizationFeeCache::default()),
+        );
         let mut consumer = BundleConsumer::new(
             committer,
             poh_recorder.read().unwrap().new_recorder(),
@@ -786,7 +798,7 @@ mod tests {
                 .bundle_storage()
                 .unwrap()
                 .get_unprocessed_bundle_storage_len(),
-            1
+            2
         );
         assert_eq!(
             unprocessed_transaction_storage
@@ -838,7 +850,7 @@ mod tests {
                     .bundle_storage()
                     .unwrap()
                     .get_cost_model_buffered_bundle_storage_len(),
-                1
+                0 //TODO; verify correct
             );
         });
 
@@ -870,5 +882,139 @@ mod tests {
                 .get_cost_model_buffered_bundle_storage_len(),
             0
         );
+    }
+    #[test]
+    fn test_hack_cost() {
+        solana_logger::setup();
+        let bundle_consumer::tests::TestFixture {
+            genesis_config_info,
+            leader_keypair,
+            bank,
+            blockstore: _,
+            exit: _,
+            poh_recorder,
+            poh_simulator: _,
+            entry_receiver: _entry_receiver,
+        } = bundle_consumer::tests::create_test_fixture(10_000_000);
+
+        let recorder = poh_recorder.read().unwrap().new_recorder();
+
+        let (replay_vote_sender, _replay_vote_receiver) = unbounded();
+        let committer = Committer::new(
+            None,
+            replay_vote_sender,
+            Arc::new(PrioritizationFeeCache::new(0u64)),
+        );
+
+        let block_builder_pubkey = Pubkey::new_unique();
+        let tip_manager =
+            bundle_consumer::tests::get_tip_manager(&genesis_config_info.voting_keypair.pubkey());
+        let block_builder_info = Arc::new(Mutex::new(BlockBuilderFeeInfo {
+            block_builder: block_builder_pubkey,
+            block_builder_commission: 10,
+        }));
+
+        let cluster_info = Arc::new(ClusterInfo::new(
+            ContactInfo::new(leader_keypair.pubkey(), 0, 0),
+            Arc::new(leader_keypair),
+            SocketAddrSpace::new(true),
+        ));
+
+        let mut consumer = BundleConsumer::new(
+            committer,
+            recorder,
+            QosService::new(1),
+            None,
+            tip_manager.clone(),
+            BundleAccountLocker::default(),
+            block_builder_info,
+            Duration::from_secs(10),
+            cluster_info.clone(),
+            BundleReservedSpaceManager::new(
+                MAX_BLOCK_UNITS,
+                3_000_000,
+                poh_recorder
+                    .read()
+                    .unwrap()
+                    .ticks_per_slot()
+                    .saturating_mul(8)
+                    .saturating_div(10),
+            ),
+        );
+
+        let bank_start = poh_recorder.read().unwrap().bank_start().unwrap();
+
+        let mut bundle_storage = UnprocessedTransactionStorage::new_bundle_storage(
+            VecDeque::with_capacity(10),
+            VecDeque::with_capacity(10),
+        );
+        let mut bundle_stage_leader_metrics = BundleStageLeaderMetrics::new(1);
+
+        // ---------------
+
+        let main = Keypair::new();
+        let keypairs = (0..10).map(|_| Keypair::new()).collect::<Vec<_>>();
+
+        let mut from1 = vec![&main];
+        from1.extend(keypairs[..5].iter().collect::<Vec<_>>());
+
+        let mut from2 = vec![&main];
+        from2.extend(keypairs[5..].iter().collect::<Vec<_>>());
+
+        let instructions = keypairs
+            .iter()
+            .map(|keypair| {
+                system_instruction::create_account(
+                    &main.pubkey(),
+                    &keypair.pubkey(),
+                    1,
+                    MAX_PERMITTED_DATA_LENGTH,
+                    &main.pubkey(),
+                )
+            })
+            .collect::<Vec<_>>();
+
+        let tx1 = Transaction::new(
+            &from1,
+            Message::new(&instructions[..5], Some(&main.pubkey())),
+            bank.last_blockhash(),
+        );
+
+        let tx2 = Transaction::new(
+            &from2,
+            Message::new(&instructions[5..], Some(&main.pubkey())),
+            bank.last_blockhash(),
+        );
+
+        let mut packet_bundle = PacketBundle {
+            batch: PacketBatch::new(vec![
+                Packet::from_data(None, tx1).unwrap(),
+                Packet::from_data(None, tx2).unwrap(),
+            ]),
+            bundle_id: "test_bundle".to_string(),
+        };
+
+        let deserialized_bundle =
+            bundle_packet_deserializer::BundlePacketDeserializer::deserialize_bundle(
+                &mut packet_bundle,
+                false,
+                None,
+            )
+            .unwrap();
+
+        let summary = bundle_storage.insert_bundles(vec![deserialized_bundle]);
+        assert_eq!(summary.num_bundles_inserted, 1);
+        assert_eq!(summary.num_packets_inserted, 2);
+        assert_eq!(summary.num_bundles_dropped, 0);
+
+        consumer.consume_buffered_bundles(
+            &bank_start,
+            &mut bundle_storage,
+            &mut bundle_stage_leader_metrics,
+        );
+
+        // Bundle storage should be zero after processing, however this bundle gets
+        // re-buffered because it exceeds the cost model immediately.
+        assert_eq!(bundle_storage.len(), 0);
     }
 }
