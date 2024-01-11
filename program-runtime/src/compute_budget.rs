@@ -1,5 +1,6 @@
 use {
     crate::prioritization_fee::{PrioritizationFeeDetails, PrioritizationFeeType},
+    log::info,
     solana_sdk::{
         borsh0_10::try_from_slice_unchecked,
         compute_budget::{self, ComputeBudgetInstruction},
@@ -204,6 +205,7 @@ impl ComputeBudget {
         support_request_units_deprecated: bool,
         support_set_loaded_accounts_data_size_limit_ix: bool,
     ) -> Result<PrioritizationFeeDetails, TransactionError> {
+        info!("sssss 1111");
         let mut num_non_compute_budget_instructions: u32 = 0;
         let mut updated_compute_unit_limit = None;
         let mut requested_heap_size = None;

@@ -7,6 +7,7 @@ use {
         sysvar_cache::SysvarCache,
         timings::{ExecuteDetailsTimings, ExecuteTimings},
     },
+    log::info,
     serde::{Deserialize, Serialize},
     solana_measure::measure::Measure,
     solana_sdk::{
@@ -68,6 +69,7 @@ impl MessageProcessor {
         current_accounts_data_len: u64,
         accumulated_consumed_units: &mut u64,
     ) -> Result<ProcessedMessageInfo, TransactionError> {
+        info!("ssss 222");
         let mut invoke_context = InvokeContext::new(
             transaction_context,
             rent,
@@ -149,6 +151,7 @@ impl MessageProcessor {
             } else {
                 let mut time = Measure::start("execute_instruction");
                 let mut compute_units_consumed = 0;
+                info!("ssss 2.1");
                 let result = invoke_context.process_instruction(
                     &instruction.data,
                     &instruction_accounts,
@@ -156,6 +159,7 @@ impl MessageProcessor {
                     &mut compute_units_consumed,
                     timings,
                 );
+                info!("ssss 2.2");
                 time.stop();
                 *accumulated_consumed_units =
                     accumulated_consumed_units.saturating_add(compute_units_consumed);
