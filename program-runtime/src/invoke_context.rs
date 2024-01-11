@@ -10,6 +10,7 @@ use {
         sysvar_cache::SysvarCache,
         timings::{ExecuteDetailsTimings, ExecuteTimings},
     },
+    log::info,
     solana_measure::measure::Measure,
     solana_rbpf::{
         ebpf::MM_HEAP_START,
@@ -731,6 +732,7 @@ impl<'a> InvokeContext<'a> {
         let instruction_context = self.transaction_context.get_current_instruction_context()?;
         let mut process_executable_chain_time = Measure::start("process_executable_chain_time");
 
+        info!("ssss 333");
         let builtin_id = {
             let borrowed_root_account = instruction_context
                 .try_borrow_program_account(self.transaction_context, 0)
@@ -742,6 +744,7 @@ impl<'a> InvokeContext<'a> {
                 *owner_id
             }
         };
+        info!("sssss 3.1");
 
         // The Murmur3 hash value (used by RBPF) of the string "entrypoint"
         const ENTRYPOINT_KEY: u32 = 0x71E3CF81;
@@ -782,7 +785,9 @@ impl<'a> InvokeContext<'a> {
             empty_memory_mapping,
             0,
         );
+        info!("ssss 3.2");
         vm.invoke_function(function);
+        info!("ssss 3.3");
         let result = match vm.program_result {
             ProgramResult::Ok(_) => {
                 stable_log::program_success(&logger, &program_id);
