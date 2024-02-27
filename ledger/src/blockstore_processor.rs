@@ -1048,6 +1048,7 @@ impl ConfirmationProgress {
     }
 }
 
+
 #[allow(clippy::too_many_arguments)]
 pub fn confirm_slot(
     blockstore: &Blockstore,
@@ -1062,7 +1063,7 @@ pub fn confirm_slot(
     allow_dead_slots: bool,
     log_messages_bytes_limit: Option<usize>,
     prioritization_fee_cache: &PrioritizationFeeCache,
-) -> result::Result<(), BlockstoreProcessorError> {
+) -> result::Result<bool, BlockstoreProcessorError> {
     let slot = bank.slot();
 
     let slot_entries_load_result = {
@@ -1079,6 +1080,12 @@ pub fn confirm_slot(
         load_result
     }?;
 
+    if slot_entries_load_result.0.is_empty() {
+        return Ok(false);
+    }
+
+    let is_full = slot_entries_load_result.2;
+
     confirm_slot_entries(
         bank,
         slot_entries_load_result,
@@ -1091,7 +1098,9 @@ pub fn confirm_slot(
         recyclers,
         log_messages_bytes_limit,
         prioritization_fee_cache,
-    )
+    )?;
+
+    Ok(!is_full)
 }
 
 #[allow(clippy::too_many_arguments)]
