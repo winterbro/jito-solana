@@ -25,7 +25,6 @@ ignores=(
   node_modules
   jito-programs
   anchor
-  jito-plugin
 )
 
 not_paths=()
