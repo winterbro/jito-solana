@@ -91,9 +91,9 @@ pub enum LoadAndExecuteBundleError {
     },
 
     #[error(
-    "A transaction in the bundle failed to execute: [signature={:?}, execution_result={:?}",
-    signature,
-    execution_result
+        "A transaction in the bundle failed to execute: [signature={:?}, execution_result={:?}",
+        signature,
+        execution_result
     )]
     TransactionError {
         signature: Signature,
@@ -505,7 +505,7 @@ fn get_account_transactions(
             None
         }
     })
-        .collect()
+    .collect()
 }
 
 #[cfg(test)]
