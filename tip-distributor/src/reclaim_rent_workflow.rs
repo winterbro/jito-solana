@@ -4,7 +4,7 @@ use {
         reclaim_rent_workflow::ClaimMevError::AnchorError, send_until_blockhash_expires,
     },
     anchor_lang::AccountDeserialize,
-    jito_block_engine_json_rpc_client::jsonrpc_client::rpc_client::RpcClient,
+    jito_block_engine_json_rpc_client,
     jito_tip_distribution::{
         sdk::{
             derive_config_account_address,
@@ -18,7 +18,7 @@ use {
     },
     log::{info, warn},
     rand::{prelude::SliceRandom, thread_rng},
-    // solana_client::nonblocking::rpc_client::RpcClient,
+    solana_client::nonblocking::rpc_client::RpcClient,
     solana_metrics::datapoint_info,
     solana_program::{clock::Epoch, pubkey::Pubkey},
     solana_rpc_client_api::config::RpcSimulateTransactionConfig,

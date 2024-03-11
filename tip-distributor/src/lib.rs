@@ -47,10 +47,7 @@ use {
         pubkey::Pubkey,
         signature::{Keypair, Signature},
         stake_history::Epoch,
-        transaction::{
-            Transaction,
-            TransactionError::{self},
-        },
+        transaction::{Transaction, TransactionError},
     },
     solana_transaction_status::TransactionStatus,
     std::{
@@ -549,6 +546,7 @@ pub async fn sign_and_send_transactions_with_retries(
 
 pub async fn send_until_blockhash_expires(
     rpc_client: &RpcClient,
+    rpc_client_bundle_api: &jito_block_engine_json_rpc_client::jsonrpc_client::rpc_client::RpcClient,
     transactions: Vec<Transaction>,
     blockhash: Hash,
     keypair: &Arc<Keypair>,
@@ -562,7 +560,6 @@ pub async fn send_until_blockhash_expires(
         .collect();
 
     let txs_requesting_send = claim_transactions.len();
-
     while rpc_client
         .is_blockhash_valid(&blockhash, CommitmentConfig::processed())
         .await?
@@ -572,18 +569,7 @@ pub async fn send_until_blockhash_expires(
         let mut is_blockhash_not_found = false;
 
         for (signature, tx) in &claim_transactions {
-            match rpc_client
-                .send_transaction_with_config(
-                    tx,
-                    RpcSendTransactionConfig {
-                        skip_preflight: false,
-                        preflight_commitment: Some(CommitmentLevel::Confirmed),
-                        max_retries: Some(2),
-                        ..RpcSendTransactionConfig::default()
-                    },
-                )
-                .await
-            {
+            match rpc_client_bundle_api.send_bundle(&[tx]).await {
                 Ok(_) => {
                     check_signatures.insert(*signature);
                 }

@@ -2,11 +2,11 @@ use {
     crate::{send_until_blockhash_expires, GeneratedMerkleTreeCollection},
     anchor_lang::{AccountDeserialize, InstructionData, ToAccountMetas},
     itertools::Itertools,
-    jito_block_engine_json_rpc_client::jsonrpc_client::rpc_client::RpcClient,
+    jito_block_engine_json_rpc_client,
     jito_tip_distribution::state::{ClaimStatus, Config, TipDistributionAccount},
     log::{error, info, warn},
     rand::{prelude::SliceRandom, thread_rng},
-    // solana_client::nonblocking::rpc_client::RpcClient,
+    solana_client::nonblocking::rpc_client::RpcClient,
     solana_metrics::datapoint_info,
     solana_program::{
         fee_calculator::DEFAULT_TARGET_LAMPORTS_PER_SIGNATURE, native_token::LAMPORTS_PER_SOL,
@@ -148,6 +148,12 @@ pub async fn claim_mev_tips(
     micro_lamports: u64,
 ) -> Result<(), ClaimMevError> {
     let rpc_client = RpcClient::new_with_timeout_and_commitment(
+        rpc_url.clone(),
+        Duration::from_secs(300),
+        CommitmentConfig::confirmed(),
+    );
+
+    let rpc_client_bundle_api = jito_block_engine_json_rpc_client::jsonrpc_client::rpc_client::RpcClient::new_with_timeout_and_commitment(
         rpc_url,
         Duration::from_secs(300),
         CommitmentConfig::confirmed(),
@@ -189,7 +195,14 @@ pub async fn claim_mev_tips(
         }
 
         let blockhash = rpc_client.get_latest_blockhash().await?;
-        let _ = send_until_blockhash_expires(&rpc_client, transactions, blockhash, &keypair).await;
+        let _ = send_until_blockhash_expires(
+            &rpc_client,
+            &rpc_client_bundle_api,
+            transactions,
+            blockhash,
+            &keypair,
+        )
+        .await;
     }
 
     let transactions = get_claim_transactions_for_valid_unclaimed(
