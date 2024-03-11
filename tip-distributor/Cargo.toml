@@ -15,6 +15,7 @@ futures = { workspace = true }
 gethostname = { workspace = true }
 im = { workspace = true }
 itertools = { workspace = true }
+jito-block-engine-json-rpc-client = { git = "https://github.com/jito-labs/json-rpc-client.git", branch = "v1.17" }
 jito-tip-distribution = { workspace = true }
 jito-tip-payment = { workspace = true }
 log = { workspace = true }

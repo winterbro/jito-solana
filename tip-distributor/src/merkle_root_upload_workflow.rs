@@ -4,12 +4,13 @@ use {
         GeneratedMerkleTreeCollection,
     },
     anchor_lang::AccountDeserialize,
+    jito_block_engine_json_rpc_client::jsonrpc_client::rpc_client::RpcClient,
     jito_tip_distribution::{
         sdk::instruction::{upload_merkle_root_ix, UploadMerkleRootAccounts, UploadMerkleRootArgs},
         state::{Config, TipDistributionAccount},
     },
     log::{error, info},
-    solana_client::nonblocking::rpc_client::RpcClient,
+    // solana_client::nonblocking::rpc_client::RpcClient,
     solana_program::{
         fee_calculator::DEFAULT_TARGET_LAMPORTS_PER_SIGNATURE, native_token::LAMPORTS_PER_SOL,
     },
