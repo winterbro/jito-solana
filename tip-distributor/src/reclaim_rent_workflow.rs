@@ -105,11 +105,14 @@ pub async fn reclaim_rent(
             return Ok(());
         }
 
-        transactions.shuffle(&mut thread_rng());
-        let transactions: Vec<_> = transactions.into_iter().take(10_000).collect();
-        let blockhash = rpc_client.get_latest_blockhash().await?;
-        send_until_blockhash_expires(&rpc_client, transactions, blockhash, &signer, &api_key)
-            .await?;
+        // send in small chunks because sending bundles is slow
+        // TODO: figure out why
+        for transactions_chunk in transactions.chunks(100) {
+            let transactions: Vec<_> = transactions_chunk.iter().cloned().collect();
+            let blockhash = rpc_client.get_latest_blockhash().await?;
+            send_until_blockhash_expires(&rpc_client, transactions, blockhash, &signer, &api_key)
+                .await?;
+        }
 
         // can just refresh calling get_multiple_accounts since these operations should be subtractive and not additive
         let claim_status_pubkeys: Vec<_> = claim_status_pubkeys_to_expire
