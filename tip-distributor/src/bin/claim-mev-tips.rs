@@ -57,9 +57,9 @@ struct Args {
     #[arg(long, env, default_value_t = 1)]
     micro_lamports: u64,
 
-    /// Block engine API key
+    /// Optional API key for the block engine
     #[arg(long, env)]
-    api_key: Option<String>,
+    block_engine_api_key: Option<String>,
 }
 
 async fn start_mev_claim_process(
@@ -177,7 +177,7 @@ async fn main() -> Result<(), ClaimMevError> {
         keypair.clone(),
         max_loop_duration,
         args.micro_lamports,
-        args.api_key.clone(),
+        args.block_engine_api_key.clone(),
     )));
     if args.should_reclaim_rent {
         futs.push(tokio::spawn(start_rent_claim(
@@ -188,7 +188,7 @@ async fn main() -> Result<(), ClaimMevError> {
             args.should_reclaim_tdas,
             args.micro_lamports,
             epoch,
-            args.api_key.clone(),
+            args.block_engine_api_key.clone(),
         )));
     }
     let results = join_all(futs).await;

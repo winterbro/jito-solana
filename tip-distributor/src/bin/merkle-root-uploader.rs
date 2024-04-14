@@ -31,7 +31,8 @@ struct Args {
     txn_send_batch_size: usize,
 
     /// Optional API key for the block engine
-    api_key: Option<String>,
+    #[arg(long, env)]
+    block_engine_api_key: Option<String>,
 }
 
 #[tokio::main]
@@ -48,7 +49,7 @@ async fn main() {
         &args.tip_distribution_program_id,
         args.max_concurrent_rpc_get_reqs,
         args.txn_send_batch_size,
-        args.api_key,
+        args.block_engine_api_key,
     )
     .await
     {
