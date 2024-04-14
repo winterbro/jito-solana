@@ -1,3 +1,4 @@
+use solana_sdk::compute_budget::ComputeBudgetInstruction;
 use {
     crate::{send_until_blockhash_expires, GeneratedMerkleTreeCollection},
     anchor_lang::{AccountDeserialize, InstructionData, ToAccountMetas},
@@ -349,10 +350,18 @@ fn build_mev_claim_transactions(
         }
     }
 
-    // TODO (LB): see if we can do >1 claim here
     let transactions: Vec<Transaction> = instructions
         .into_iter()
-        .map(|claim_ix| Transaction::new_with_payer(&[claim_ix], Some(&payer_pubkey)))
+        .map(|claim_ix| {
+            Transaction::new_with_payer(
+                &[
+                    // helps get txs into block easier since default is 400k CUs
+                    ComputeBudgetInstruction::set_compute_unit_limit(40_000),
+                    claim_ix,
+                ],
+                Some(&payer_pubkey),
+            )
+        })
         .collect();
 
     transactions
