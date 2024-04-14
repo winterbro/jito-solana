@@ -144,11 +144,14 @@ pub async fn upload_merkle_root(
             .await?
             .0;
 
-        if let Err(e) =
-            send_until_blockhash_expires(&rpc_client, transactions, blockhash, &keypair, &api_key)
-                .await
-        {
-            error!("send_until_blockhash_expires failed: {:?}", e);
+        for tx_chunk in transactions.chunks(1_000) {
+            let tx_vec = tx_chunk.to_vec();
+            if let Err(e) =
+                send_until_blockhash_expires(&rpc_client, tx_vec, blockhash, &keypair, &api_key)
+                    .await
+            {
+                error!("send_until_blockhash_expires failed: {:?}", e);
+            }
         }
     }
 
