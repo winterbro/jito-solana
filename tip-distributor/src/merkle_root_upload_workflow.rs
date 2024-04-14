@@ -1,5 +1,4 @@
 use crate::send_until_blockhash_expires;
-use solana_program_runtime::compute_budget::ComputeBudget;
 use solana_sdk::compute_budget::ComputeBudgetInstruction;
 use std::sync::Arc;
 use std::time::Instant;
@@ -44,6 +43,7 @@ pub async fn upload_merkle_root(
     tip_distribution_program_id: &Pubkey,
     _max_concurrent_rpc_get_reqs: usize,
     _txn_send_batch_size: usize,
+    api_key: Option<String>,
 ) -> Result<(), MerkleRootUploadError> {
     const MAX_RETRY_DURATION: Duration = Duration::from_secs(600);
 
@@ -145,7 +145,8 @@ pub async fn upload_merkle_root(
             .0;
 
         if let Err(e) =
-            send_until_blockhash_expires(&rpc_client, transactions, blockhash, &keypair).await
+            send_until_blockhash_expires(&rpc_client, transactions, blockhash, &keypair, &api_key)
+                .await
         {
             error!("send_until_blockhash_expires failed: {:?}", e);
         }

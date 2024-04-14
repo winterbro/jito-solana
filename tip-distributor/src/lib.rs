@@ -559,6 +559,7 @@ pub async fn send_until_blockhash_expires(
     transactions: Vec<Transaction>,
     blockhash: Hash,
     keypair: &Arc<Keypair>,
+    api_key: &Option<String>,
 ) -> solana_rpc_client_api::client_error::Result<()> {
     let mut claim_transactions: HashMap<Signature, Transaction> = transactions
         .into_iter()
@@ -604,7 +605,12 @@ pub async fn send_until_blockhash_expires(
 
             txs.insert(0, &tip_tx);
 
-            match bundle_tips::send_bundle(&txs, round_robin_urls[i % round_robin_urls.len()]).await
+            match bundle_tips::send_bundle(
+                &txs,
+                round_robin_urls[i % round_robin_urls.len()],
+                api_key,
+            )
+            .await
             {
                 Ok(bundle_id) => {
                     let signatures: Vec<_> = txs.iter().map(|tx| tx.signatures[0]).collect();

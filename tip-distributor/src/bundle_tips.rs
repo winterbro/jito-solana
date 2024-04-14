@@ -47,9 +47,12 @@ pub enum BundleError {
     Other,
 }
 
-fn generate_json_rpc_headers() -> HeaderMap {
+fn generate_json_rpc_headers(api_key: &Option<String>) -> HeaderMap {
     let mut headers = HeaderMap::new();
     headers.insert("Content-Type", "application/json".parse().unwrap());
+    if let Some(api_key) = api_key {
+        headers.insert("x-jito-auth", api_key.parse().unwrap());
+    }
     headers
 }
 
@@ -119,7 +122,11 @@ async fn send_json_rpc_request(
     client.post(url).headers(headers).body(payload).send().await
 }
 
-pub async fn send_bundle(transactions: &[&Transaction], url: &str) -> Result<String, BundleError> {
+pub async fn send_bundle(
+    transactions: &[&Transaction],
+    url: &str,
+    api_key: &Option<String>,
+) -> Result<String, BundleError> {
     let mut bundle = Vec::new();
     for transaction in transactions {
         bundle.push(Value::String(
@@ -134,7 +141,7 @@ pub async fn send_bundle(transactions: &[&Transaction], url: &str) -> Result<Str
     let response = send_json_rpc_request(
         url,
         generate_jsonrpc(BUNDLE_METHOD, 1, vec![Value::Array(bundle)]),
-        generate_json_rpc_headers(),
+        generate_json_rpc_headers(api_key),
     )
     .await
     .map_err(|err| {

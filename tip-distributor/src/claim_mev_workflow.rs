@@ -144,6 +144,7 @@ pub async fn claim_mev_tips(
     keypair: Arc<Keypair>,
     max_loop_duration: Duration,
     micro_lamports: u64,
+    api_key: Option<String>,
 ) -> Result<(), ClaimMevError> {
     let rpc_client = RpcClient::new_with_timeout_and_commitment(
         rpc_url,
@@ -187,7 +188,8 @@ pub async fn claim_mev_tips(
 
         let blockhash = rpc_client.get_latest_blockhash().await?;
         if let Err(e) =
-            send_until_blockhash_expires(&rpc_client, transactions, blockhash, &keypair).await
+            send_until_blockhash_expires(&rpc_client, transactions, blockhash, &keypair, &api_key)
+                .await
         {
             error!("send_until_blockhash_expires failed: {:?}", e);
             continue;
