@@ -173,31 +173,36 @@ pub async fn claim_mev_tips(
             return Ok(());
         }
 
-        let transactions: Vec<_> = all_claim_transactions
-            .iter()
-            .take(20_000)
-            .cloned()
-            .collect();
+        // small chunks because send_bundle is slow.. need to debug why, but if send too many
+        // here then the blockhash can expire
+        for transactions in all_claim_transactions.chunks(100) {
+            let transactions: Vec<_> = transactions.iter().cloned().collect();
+            // only check balance for the ones we need to currently send since reclaim rent running in parallel
+            if let Some((start_balance, desired_balance, sol_to_deposit)) =
+                is_sufficient_balance(&keypair.pubkey(), &rpc_client, transactions.len() as u64)
+                    .await
+            {
+                return Err(ClaimMevError::InsufficientBalance {
+                    desired_balance,
+                    payer: keypair.pubkey(),
+                    start_balance,
+                    sol_to_deposit,
+                });
+            }
 
-        // only check balance for the ones we need to currently send since reclaim rent running in parallel
-        if let Some((start_balance, desired_balance, sol_to_deposit)) =
-            is_sufficient_balance(&keypair.pubkey(), &rpc_client, transactions.len() as u64).await
-        {
-            return Err(ClaimMevError::InsufficientBalance {
-                desired_balance,
-                payer: keypair.pubkey(),
-                start_balance,
-                sol_to_deposit,
-            });
-        }
-
-        let blockhash = rpc_client.get_latest_blockhash().await?;
-        if let Err(e) =
-            send_until_blockhash_expires(&rpc_client, transactions, blockhash, &keypair, &api_key)
-                .await
-        {
-            error!("send_until_blockhash_expires failed: {:?}", e);
-            continue;
+            let blockhash = rpc_client.get_latest_blockhash().await?;
+            if let Err(e) = send_until_blockhash_expires(
+                &rpc_client,
+                transactions,
+                blockhash,
+                &keypair,
+                &api_key,
+            )
+            .await
+            {
+                error!("send_until_blockhash_expires failed: {:?}", e);
+                continue;
+            }
         }
     }
 
