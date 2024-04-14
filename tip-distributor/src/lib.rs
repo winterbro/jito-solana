@@ -7,6 +7,8 @@ pub mod stake_meta_generator_workflow;
 
 use rand::distributions::Alphanumeric;
 use rand::distributions::DistString;
+use reqwest::redirect::Policy;
+use reqwest::Client;
 use solana_sdk::signature::Signer;
 use std::str::FromStr;
 use {
@@ -573,6 +575,8 @@ pub async fn send_until_blockhash_expires(
 
     let tip_account = Pubkey::from_str("96gYZGLnJYVFmbjzopPSU6QiEV5fGqZNyN9nmNhvrZU5").unwrap();
 
+    let client = Client::builder().redirect(Policy::none()).build().unwrap();
+
     while rpc_client
         .is_blockhash_valid(&blockhash, CommitmentConfig::processed())
         .await?
@@ -607,6 +611,7 @@ pub async fn send_until_blockhash_expires(
 
             match bundle_tips::send_bundle(
                 &txs,
+                &client,
                 round_robin_urls[i % round_robin_urls.len()],
                 api_key,
             )

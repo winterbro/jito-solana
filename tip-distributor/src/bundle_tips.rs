@@ -114,16 +114,17 @@ pub fn proto_packet_from_versioned_tx(
 }
 
 async fn send_json_rpc_request(
+    client: &Client,
     url: &str,
     payload: String,
     headers: HeaderMap,
 ) -> Result<Response, Error> {
-    let client = Client::builder().redirect(Policy::none()).build().unwrap();
     client.post(url).headers(headers).body(payload).send().await
 }
 
 pub async fn send_bundle(
     transactions: &[&Transaction],
+    client: &Client,
     url: &str,
     api_key: &Option<String>,
 ) -> Result<String, BundleError> {
@@ -139,6 +140,7 @@ pub async fn send_bundle(
 
     // Generate the headers and payload and send
     let response = send_json_rpc_request(
+        client,
         url,
         generate_jsonrpc(BUNDLE_METHOD, 1, vec![Value::Array(bundle)]),
         generate_json_rpc_headers(api_key),
