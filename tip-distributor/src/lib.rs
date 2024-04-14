@@ -606,7 +606,10 @@ pub async fn send_until_blockhash_expires(
 
             match bundle_tips::send_bundle(&txs, round_robin_urls[i % round_robin_urls.len()]).await
             {
-                Ok(_) => {}
+                Ok(_) => {
+                    let signatures: Vec<_> = txs.iter().map(|tx| tx.signatures[0]).collect();
+                    info!("sent bundle ok, signatures: {:?}", signatures);
+                }
                 Err(e) => {
                     warn!("send_bundle failed: {:?}", e);
                 }
@@ -622,6 +625,7 @@ pub async fn send_until_blockhash_expires(
         for (sig, status) in &statuses {
             if let Some(status) = status {
                 if status.status.is_ok() {
+                    info!("transaction landed: {:?}", sig);
                     claim_transactions.remove(sig);
                 }
             }
