@@ -31,7 +31,8 @@ struct Args {
     txn_send_batch_size: usize,
 }
 
-fn main() {
+#[tokio::main]
+async fn main() {
     env_logger::init();
 
     let args: Args = Args::parse();
@@ -44,7 +45,9 @@ fn main() {
         &args.tip_distribution_program_id,
         args.max_concurrent_rpc_get_reqs,
         args.txn_send_batch_size,
-    ) {
+    )
+    .await
+    {
         panic!("failed to upload merkle roots: {:?}", e);
     }
     info!(

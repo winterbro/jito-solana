@@ -1,5 +1,3 @@
-use std::clone;
-
 use log::warn;
 use reqwest::{header::HeaderMap, redirect::Policy, Client, Error, Response};
 use serde_json::{json, Value};
@@ -135,7 +133,7 @@ pub async fn send_bundle(transactions: &[&Transaction], url: &str) -> Result<Str
     // Generate the headers and payload and send
     let response = send_json_rpc_request(
         url,
-        generate_jsonrpc(BUNDLE_METHOD, 1, vec![serde_json::Value::Array(bundle)]),
+        generate_jsonrpc(BUNDLE_METHOD, 1, vec![Value::Array(bundle)]),
         generate_json_rpc_headers(),
     )
     .await

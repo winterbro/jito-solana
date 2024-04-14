@@ -4,7 +4,6 @@ use {
     itertools::Itertools,
     jito_tip_distribution::state::{ClaimStatus, Config, TipDistributionAccount},
     log::{error, info, warn},
-    rand::{prelude::SliceRandom, thread_rng},
     solana_client::nonblocking::rpc_client::RpcClient,
     solana_metrics::datapoint_info,
     solana_program::{
@@ -15,13 +14,11 @@ use {
     solana_sdk::{
         account::Account,
         commitment_config::CommitmentConfig,
-        compute_budget::ComputeBudgetInstruction,
         instruction::Instruction,
         pubkey::Pubkey,
         signature::{Keypair, Signer},
         transaction::Transaction,
     },
-    std::str::FromStr,
     std::{
         collections::HashMap,
         sync::Arc,
@@ -154,28 +151,26 @@ pub async fn claim_mev_tips(
     );
 
     let start = Instant::now();
-    let mut all_claim_transactions = get_claim_transactions_for_valid_unclaimed(
-        &rpc_client,
-        merkle_trees,
-        tip_distribution_program_id,
-        micro_lamports,
-        keypair.pubkey(),
-    )
-    .await?;
-
-    all_claim_transactions.shuffle(&mut thread_rng());
 
     while start.elapsed() <= max_loop_duration {
+        let all_claim_transactions = get_claim_transactions_for_valid_unclaimed(
+            &rpc_client,
+            merkle_trees,
+            tip_distribution_program_id,
+            micro_lamports,
+            keypair.pubkey(),
+        )
+        .await?;
+        if all_claim_transactions.is_empty() {
+            return Ok(());
+        }
+
         datapoint_info!(
             "claim_mev_tips-send_summary",
             ("claim_transactions_left", all_claim_transactions.len(), i64),
         );
 
-        if all_claim_transactions.is_empty() {
-            return Ok(());
-        }
-
-        let transactions: Vec<_> = all_claim_transactions.into_iter().take(1000).collect();
+        let transactions: Vec<_> = all_claim_transactions.iter().take(20000).cloned().collect();
 
         // only check balance for the ones we need to currently send since reclaim rent running in parallel
         if let Some((start_balance, desired_balance, sol_to_deposit)) =
@@ -190,7 +185,12 @@ pub async fn claim_mev_tips(
         }
 
         let blockhash = rpc_client.get_latest_blockhash().await?;
-        let _ = send_until_blockhash_expires(&rpc_client, transactions, blockhash, &keypair).await;
+        if let Err(e) =
+            send_until_blockhash_expires(&rpc_client, transactions, blockhash, &keypair).await
+        {
+            error!("send_until_blockhash_expires failed: {:?}", e);
+            continue;
+        }
     }
 
     let transactions = get_claim_transactions_for_valid_unclaimed(
@@ -263,7 +263,7 @@ fn build_mev_claim_transactions(
     tdas: HashMap<Pubkey, Account>,
     claimants: HashMap<Pubkey, Account>,
     claim_status: HashMap<Pubkey, Account>,
-    micro_lamports: u64,
+    _micro_lamports: u64,
     payer_pubkey: Pubkey,
 ) -> Vec<Transaction> {
     let tip_distribution_accounts: HashMap<Pubkey, TipDistributionAccount> = tdas
