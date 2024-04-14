@@ -606,9 +606,12 @@ pub async fn send_until_blockhash_expires(
 
             match bundle_tips::send_bundle(&txs, round_robin_urls[i % round_robin_urls.len()]).await
             {
-                Ok(_) => {
+                Ok(bundle_id) => {
                     let signatures: Vec<_> = txs.iter().map(|tx| tx.signatures[0]).collect();
-                    info!("sent bundle ok, signatures: {:?}", signatures);
+                    info!(
+                        "sent bundle ok, bundle_id: {}, signatures: {:?}",
+                        bundle_id, signatures
+                    );
                 }
                 Err(e) => {
                     warn!("send_bundle failed: {:?}", e);

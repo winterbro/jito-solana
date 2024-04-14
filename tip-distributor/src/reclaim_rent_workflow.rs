@@ -52,6 +52,7 @@ pub async fn reclaim_rent(
 
     let start = Instant::now();
 
+    info!("fetching tip distribution accounts, may take awhile");
     let accounts = rpc_client
         .get_program_accounts(&tip_distribution_program_id)
         .await?;
@@ -64,7 +65,16 @@ pub async fn reclaim_rent(
     let epoch = rpc_client.get_epoch_info().await?.epoch;
     let mut claim_status_pubkeys_to_expire =
         find_expired_claim_status_accounts(&accounts, epoch, signer.pubkey());
+    info!(
+        "found {} claim status accounts to expire",
+        claim_status_pubkeys_to_expire.len()
+    );
+
     let mut tda_pubkeys_to_expire = find_expired_tda_accounts(&accounts, epoch);
+    info!(
+        "found {} tip distribution accounts to expire",
+        tda_pubkeys_to_expire.len()
+    );
 
     while start.elapsed() <= max_loop_duration {
         let mut transactions = build_close_claim_status_transactions(
