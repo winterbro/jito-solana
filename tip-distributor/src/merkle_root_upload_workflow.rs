@@ -1,4 +1,6 @@
 use crate::send_until_blockhash_expires;
+use solana_program_runtime::compute_budget::ComputeBudget;
+use solana_sdk::compute_budget::ComputeBudgetInstruction;
 use std::sync::Arc;
 use std::time::Instant;
 use {
@@ -130,7 +132,10 @@ pub async fn upload_merkle_root(
                         tip_distribution_account: tree.tip_distribution_account,
                     },
                 );
-                Transaction::new_with_payer(&[ix], Some(&keypair.pubkey()))
+                Transaction::new_with_payer(
+                    &[ComputeBudgetInstruction::set_compute_unit_limit(15_000), ix],
+                    Some(&keypair.pubkey()),
+                )
             })
             .collect();
 
