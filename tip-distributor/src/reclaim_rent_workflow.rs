@@ -46,8 +46,8 @@ pub async fn reclaim_rent(
 ) -> Result<(), ClaimMevError> {
     let rpc_client = RpcClient::new_with_timeout_and_commitment(
         rpc_url.clone(),
-        Duration::from_secs(300),
-        CommitmentConfig::processed(),
+        Duration::from_secs(1200),
+        CommitmentConfig::confirmed(),
     );
 
     let start = Instant::now();
@@ -266,9 +266,10 @@ fn build_close_claim_status_transactions(
         .collect::<Vec<_>>()
         .chunks(4)
         .map(|close_claim_status_instructions| {
-            let mut instructions = vec![ComputeBudgetInstruction::set_compute_unit_price(
-                microlamports,
-            )];
+            let mut instructions = vec![
+                ComputeBudgetInstruction::set_compute_unit_price(microlamports),
+                ComputeBudgetInstruction::set_compute_unit_limit(50_000),
+            ];
             instructions.extend(close_claim_status_instructions.to_vec());
             Transaction::new_with_payer(&instructions, Some(&payer))
         })
