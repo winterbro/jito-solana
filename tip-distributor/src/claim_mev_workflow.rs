@@ -163,16 +163,21 @@ pub async fn claim_mev_tips(
             keypair.pubkey(),
         )
         .await?;
-        if all_claim_transactions.is_empty() {
-            return Ok(());
-        }
 
         datapoint_info!(
             "claim_mev_tips-send_summary",
             ("claim_transactions_left", all_claim_transactions.len(), i64),
         );
 
-        let transactions: Vec<_> = all_claim_transactions.iter().take(100).cloned().collect();
+        if all_claim_transactions.is_empty() {
+            return Ok(());
+        }
+
+        let transactions: Vec<_> = all_claim_transactions
+            .iter()
+            .take(20_000)
+            .cloned()
+            .collect();
 
         // only check balance for the ones we need to currently send since reclaim rent running in parallel
         if let Some((start_balance, desired_balance, sol_to_deposit)) =
