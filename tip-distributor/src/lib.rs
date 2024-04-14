@@ -625,7 +625,7 @@ pub async fn send_until_blockhash_expires(
             }
         }
 
-        sleep(Duration::from_secs(10)).await;
+        sleep(Duration::from_secs(2)).await;
 
         let signatures: Vec<_> = claim_transactions.keys().cloned().collect();
 
