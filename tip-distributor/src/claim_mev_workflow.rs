@@ -175,7 +175,7 @@ pub async fn claim_mev_tips(
 
         // small chunks because send_bundle is slow.. need to debug why, but if send too many
         // here then the blockhash can expire
-        for transactions in all_claim_transactions.chunks(100_000) {
+        for transactions in all_claim_transactions.chunks(5_000) {
             let transactions: Vec<_> = transactions.iter().cloned().collect();
             // only check balance for the ones we need to currently send since reclaim rent running in parallel
             if let Some((start_balance, desired_balance, sol_to_deposit)) =

@@ -107,7 +107,7 @@ pub async fn reclaim_rent(
 
         // send in small chunks because sending bundles is slow
         // TODO: figure out why
-        for transactions_chunk in transactions.chunks(100_000) {
+        for transactions_chunk in transactions.chunks(5_000) {
             let transactions: Vec<_> = transactions_chunk.iter().cloned().collect();
             let blockhash = rpc_client.get_latest_blockhash().await?;
             send_until_blockhash_expires(&rpc_client, transactions, blockhash, &signer, &api_key)
