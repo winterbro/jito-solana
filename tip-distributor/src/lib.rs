@@ -628,6 +628,7 @@ pub async fn send_until_blockhash_expires(
                     warn!("send_bundle failed: {:?}", e);
                 }
             }
+            sleep(Duration::from_millis(5)).await;
         }
 
         sleep(Duration::from_secs(2)).await;
