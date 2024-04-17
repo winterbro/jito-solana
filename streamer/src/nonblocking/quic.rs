@@ -521,8 +521,11 @@ async fn setup_connection(
                         }
                     },
                 );
-
                 if params.stake > 0 {
+                    info!(
+                        "Staked Connection: {:?}    has {} stake.",
+                        params.remote_pubkey, params.stake
+                    );
                     let mut connection_table_l = staked_connection_table.lock().await;
 
                     if connection_table_l.total_size >= max_staked_connections {
