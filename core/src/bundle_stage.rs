@@ -101,24 +101,24 @@ impl BundleStageLoopMetrics {
             .fetch_add(count, Ordering::Relaxed);
     }
 
-    pub fn increment_current_buffered_bundles_count(&mut self, count: u64) {
+    pub fn set_current_buffered_bundles_count(&mut self, count: u64) {
         self.current_buffered_bundles_count
-            .fetch_add(count, Ordering::Relaxed);
+            .swap(count, Ordering::Relaxed);
     }
 
-    pub fn increment_current_buffered_packets_count(&mut self, count: u64) {
+    pub fn set_current_buffered_packets_count(&mut self, count: u64) {
         self.current_buffered_packets_count
-            .fetch_add(count, Ordering::Relaxed);
+            .swap(count, Ordering::Relaxed);
     }
 
-    pub fn increment_cost_model_buffered_bundles_count(&mut self, count: u64) {
+    pub fn set_cost_model_buffered_bundles_count(&mut self, count: u64) {
         self.cost_model_buffered_bundles_count
-            .fetch_add(count, Ordering::Relaxed);
+            .swap(count, Ordering::Relaxed);
     }
 
-    pub fn increment_cost_model_buffered_packets_count(&mut self, count: u64) {
+    pub fn set_cost_model_buffered_packets_count(&mut self, count: u64) {
         self.cost_model_buffered_packets_count
-            .fetch_add(count, Ordering::Relaxed);
+            .swap(count, Ordering::Relaxed);
     }
 
     pub fn increment_num_bundles_dropped(&mut self, count: u64) {
@@ -356,16 +356,16 @@ impl BundleStage {
             }
 
             let bundle_storage = unprocessed_bundle_storage.bundle_storage().unwrap();
-            bundle_stage_metrics.increment_current_buffered_bundles_count(
+            bundle_stage_metrics.set_current_buffered_bundles_count(
                 bundle_storage.unprocessed_bundles_len() as u64,
             );
-            bundle_stage_metrics.increment_current_buffered_packets_count(
+            bundle_stage_metrics.set_current_buffered_packets_count(
                 bundle_storage.unprocessed_packets_len() as u64,
             );
-            bundle_stage_metrics.increment_cost_model_buffered_bundles_count(
+            bundle_stage_metrics.set_cost_model_buffered_bundles_count(
                 bundle_storage.cost_model_buffered_bundles_len() as u64,
             );
-            bundle_stage_metrics.increment_cost_model_buffered_packets_count(
+            bundle_stage_metrics.set_cost_model_buffered_packets_count(
                 bundle_storage.cost_model_buffered_packets_len() as u64,
             );
             bundle_stage_metrics.maybe_report(1_000);
