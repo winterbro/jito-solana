@@ -18,6 +18,7 @@ use {
         tip_manager::TipManager,
     },
     crossbeam_channel::{Receiver, RecvTimeoutError},
+    histogram_011::AtomicHistogram,
     solana_cost_model::block_cost_limits::MAX_BLOCK_UNITS,
     solana_gossip::cluster_info::ClusterInfo,
     solana_ledger::blockstore_processor::TransactionStatusSender,
@@ -49,7 +50,6 @@ const MAX_BUNDLE_RETRY_DURATION: Duration = Duration::from_millis(40);
 const SLOT_BOUNDARY_CHECK_PERIOD: Duration = Duration::from_millis(10);
 
 // Stats emitted periodically
-#[derive(Default)]
 pub struct BundleStageLoopMetrics {
     last_report: AtomicInterval,
     id: u32,
@@ -62,12 +62,12 @@ pub struct BundleStageLoopMetrics {
     newly_buffered_bundles_count: AtomicU64,
 
     // currently buffered
-    current_buffered_bundles_count: AtomicU64,
-    current_buffered_packets_count: AtomicU64,
+    current_buffered_bundles_count: AtomicHistogram,
+    current_buffered_packets_count: AtomicHistogram,
 
     // buffered due to cost model
-    cost_model_buffered_bundles_count: AtomicU64,
-    cost_model_buffered_packets_count: AtomicU64,
+    cost_model_buffered_bundles_count: AtomicHistogram,
+    cost_model_buffered_packets_count: AtomicHistogram,
 
     // number of bundles dropped during insertion
     num_bundles_dropped: AtomicU64,
@@ -75,6 +75,33 @@ pub struct BundleStageLoopMetrics {
     // timings
     receive_and_buffer_bundles_elapsed_us: AtomicU64,
     process_buffered_bundles_elapsed_us: AtomicU64,
+}
+
+impl Default for BundleStageLoopMetrics {
+    fn default() -> Self {
+        // Define default configuration for AtomicHistogram
+        let default_p = 7;
+        let default_n = 64;
+
+        Self {
+            last_report: AtomicInterval::default(),
+            id: 0,
+            num_bundles_received: AtomicU64::new(0),
+            num_packets_received: AtomicU64::new(0),
+            newly_buffered_bundles_count: AtomicU64::new(0),
+            current_buffered_bundles_count: AtomicHistogram::new(default_p, default_n)
+                .expect("Default configuration for AtomicHistogram should be valid"),
+            current_buffered_packets_count: AtomicHistogram::new(default_p, default_n)
+                .expect("Default configuration for AtomicHistogram should be valid"),
+            cost_model_buffered_bundles_count: AtomicHistogram::new(default_p, default_n)
+                .expect("Default configuration for AtomicHistogram should be valid"),
+            cost_model_buffered_packets_count: AtomicHistogram::new(default_p, default_n)
+                .expect("Default configuration for AtomicHistogram should be valid"),
+            num_bundles_dropped: AtomicU64::new(0),
+            receive_and_buffer_bundles_elapsed_us: AtomicU64::new(0),
+            process_buffered_bundles_elapsed_us: AtomicU64::new(0),
+        }
+    }
 }
 
 impl BundleStageLoopMetrics {
@@ -100,24 +127,20 @@ impl BundleStageLoopMetrics {
             .fetch_add(count, Ordering::Relaxed);
     }
 
-    pub fn set_current_buffered_bundles_count(&mut self, count: u64) {
-        self.current_buffered_bundles_count
-            .swap(count, Ordering::Relaxed);
+    pub fn increment_current_buffered_bundles_count(&mut self, count: u64) {
+        let _ = self.current_buffered_bundles_count.increment(count);
     }
 
-    pub fn set_current_buffered_packets_count(&mut self, count: u64) {
-        self.current_buffered_packets_count
-            .swap(count, Ordering::Relaxed);
+    pub fn increment_current_buffered_packets_count(&mut self, count: u64) {
+        let _ = self.current_buffered_packets_count.increment(count);
     }
 
-    pub fn set_cost_model_buffered_bundles_count(&mut self, count: u64) {
-        self.cost_model_buffered_bundles_count
-            .swap(count, Ordering::Relaxed);
+    pub fn increment_cost_model_buffered_bundles_count(&mut self, count: u64) {
+        let _ = self.cost_model_buffered_bundles_count.increment(count);
     }
 
-    pub fn set_cost_model_buffered_packets_count(&mut self, count: u64) {
-        self.cost_model_buffered_packets_count
-            .swap(count, Ordering::Relaxed);
+    pub fn increment_cost_model_buffered_packets_count(&mut self, count: u64) {
+        let _ = self.cost_model_buffered_packets_count.increment(count);
     }
 
     pub fn increment_num_bundles_dropped(&mut self, count: u64) {
@@ -133,11 +156,50 @@ impl BundleStageLoopMetrics {
         self.process_buffered_bundles_elapsed_us
             .fetch_add(count, Ordering::Relaxed);
     }
+
+    /// Drain histogram contents and return percentiles
+    fn percentiles_3(
+        atomic_histogram: &mut AtomicHistogram,
+        percentile_1: f64,
+        percentile_2: f64,
+        percentile_3: f64,
+    ) -> (u64, u64, u64) {
+        let mut iter = atomic_histogram
+            .drain()
+            .percentiles(&[percentile_1, percentile_2, percentile_3])
+            .ok()
+            .flatten()
+            .into_iter()
+            .flatten()
+            .map(|(_percentile, bucket)| bucket.end());
+        let (p1, p2, p3) = (
+            iter.next().unwrap_or_default(),
+            iter.next().unwrap_or_default(),
+            iter.next().unwrap_or_default(),
+        );
+        (p1, p2, p3)
+    }
 }
 
 impl BundleStageLoopMetrics {
     fn maybe_report(&mut self, report_interval_ms: u64) {
         if self.last_report.should_update(report_interval_ms) {
+            let current_buffered_bundles_count =
+                Self::percentiles_3(&mut self.current_buffered_bundles_count, 50.0, 90.0, 100.0);
+            let current_buffered_packets_count =
+                Self::percentiles_3(&mut self.current_buffered_packets_count, 50.0, 90.0, 100.0);
+            let cost_model_buffered_bundles_count = Self::percentiles_3(
+                &mut self.cost_model_buffered_bundles_count,
+                50.0,
+                90.0,
+                100.0,
+            );
+            let cost_model_buffered_packets_count = Self::percentiles_3(
+                &mut self.cost_model_buffered_packets_count,
+                50.0,
+                90.0,
+                100.0,
+            );
             datapoint_info!(
                 "bundle_stage-loop_stats",
                 ("id", self.id, i64),
@@ -157,15 +219,63 @@ impl BundleStageLoopMetrics {
                     i64
                 ),
                 (
-                    "current_buffered_bundles_count",
-                    self.current_buffered_bundles_count
-                        .swap(0, Ordering::Acquire) as i64,
+                    "current_buffered_bundles_count_p50",
+                    current_buffered_bundles_count.0 as i64,
                     i64
                 ),
                 (
-                    "current_buffered_packets_count",
-                    self.current_buffered_packets_count
-                        .swap(0, Ordering::Acquire) as i64,
+                    "current_buffered_bundles_count_p90",
+                    current_buffered_bundles_count.1 as i64,
+                    i64
+                ),
+                (
+                    "current_buffered_bundles_count_max",
+                    current_buffered_bundles_count.2 as i64,
+                    i64
+                ),
+                (
+                    "current_buffered_packets_count_p50",
+                    current_buffered_packets_count.0 as i64,
+                    i64
+                ),
+                (
+                    "current_buffered_packets_count_p90",
+                    current_buffered_packets_count.1 as i64,
+                    i64
+                ),
+                (
+                    "current_buffered_packets_count_max",
+                    current_buffered_packets_count.2 as i64,
+                    i64
+                ),
+                (
+                    "current_buffered_packets_count_p50",
+                    cost_model_buffered_bundles_count.0 as i64,
+                    i64
+                ),
+                (
+                    "cost_model_buffered_bundles_count_p90",
+                    cost_model_buffered_bundles_count.1 as i64,
+                    i64
+                ),
+                (
+                    "cost_model_buffered_bundles_count_max",
+                    cost_model_buffered_bundles_count.2 as i64,
+                    i64
+                ),
+                (
+                    "cost_model_buffered_bundles_count_p50",
+                    cost_model_buffered_packets_count.0 as i64,
+                    i64
+                ),
+                (
+                    "cost_model_buffered_bundles_count_p90",
+                    cost_model_buffered_packets_count.1 as i64,
+                    i64
+                ),
+                (
+                    "cost_model_buffered_bundles_count_max",
+                    cost_model_buffered_packets_count.2 as i64,
                     i64
                 ),
                 (
@@ -358,16 +468,16 @@ impl BundleStage {
             }
 
             let bundle_storage = unprocessed_bundle_storage.bundle_storage().unwrap();
-            bundle_stage_metrics.set_current_buffered_bundles_count(
+            bundle_stage_metrics.increment_current_buffered_bundles_count(
                 bundle_storage.unprocessed_bundles_len() as u64,
             );
-            bundle_stage_metrics.set_current_buffered_packets_count(
+            bundle_stage_metrics.increment_current_buffered_packets_count(
                 bundle_storage.unprocessed_packets_len() as u64,
             );
-            bundle_stage_metrics.set_cost_model_buffered_bundles_count(
+            bundle_stage_metrics.increment_cost_model_buffered_bundles_count(
                 bundle_storage.cost_model_buffered_bundles_len() as u64,
             );
-            bundle_stage_metrics.set_cost_model_buffered_packets_count(
+            bundle_stage_metrics.increment_cost_model_buffered_packets_count(
                 bundle_storage.cost_model_buffered_packets_len() as u64,
             );
             bundle_stage_metrics.maybe_report(1_000);

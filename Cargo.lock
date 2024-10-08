@@ -2655,6 +2655,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "12cb882ccb290b8646e554b157ab0b71e64e8d5bef775cd66b6531e52d302669"
 
 [[package]]
+name = "histogram"
+version = "0.11.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b62b8d85713ddc62e5e78db13bf9f9305610d0419276faa845076a68b7165872"
+dependencies = [
+ "thiserror",
+]
+
+[[package]]
 name = "hmac"
 version = "0.8.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -6237,7 +6246,8 @@ dependencies = [
  "etcd-client",
  "fs_extra",
  "futures 0.3.30",
- "histogram",
+ "histogram 0.11.0",
+ "histogram 0.6.9",
  "itertools",
  "jito-protos",
  "jito-tip-distribution",
@@ -6731,7 +6741,7 @@ dependencies = [
  "csv",
  "dashmap",
  "futures 0.3.30",
- "histogram",
+ "histogram 0.6.9",
  "itertools",
  "log",
  "num_cpus",
@@ -7669,7 +7679,7 @@ dependencies = [
  "bytes",
  "crossbeam-channel",
  "futures-util",
- "histogram",
+ "histogram 0.6.9",
  "indexmap 2.1.0",
  "itertools",
  "libc",
