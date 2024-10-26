@@ -564,7 +564,7 @@ impl Tower {
     pub fn record_bank_vote(&mut self, bank: &Bank) -> Option<Slot> {
         // Returns the new root if one is made after applying a vote for the given bank to
         // `self.vote_state`
-        self.record_bank_vote_and_update_lockouts(bank.slot(), bank.hash())
+        self.record_bank_vote_and_update_lockouts(bank.slot(), bank.hash(), 0)
     }
 
     /// If we've recently updated the vote state by applying a new vote
@@ -588,12 +588,13 @@ impl Tower {
         &mut self,
         vote_slot: Slot,
         vote_hash: Hash,
+        parent_slot: u64,
     ) -> Option<Slot> {
         trace!("{} record_vote for {}", self.node_pubkey, vote_slot);
         let old_root = self.root();
 
         let vote = Vote::new(vec![vote_slot], vote_hash);
-        let result = process_vote_unchecked(&mut self.vote_state, vote);
+        let result = process_vote_unchecked(&mut self.vote_state, vote, parent_slot);
         if result.is_err() {
             panic!(
                 "Error while recording vote {} {} in local tower {:?}",
@@ -618,7 +619,7 @@ impl Tower {
 
     #[cfg(test)]
     pub fn record_vote(&mut self, slot: Slot, hash: Hash) -> Option<Slot> {
-        self.record_bank_vote_and_update_lockouts(slot, hash)
+        self.record_bank_vote_and_update_lockouts(slot, hash, 0)
     }
 
     /// Used for tests

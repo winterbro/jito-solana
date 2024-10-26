@@ -741,6 +741,7 @@ pub fn process_vote_unfiltered(
     current_slot: Slot,
     timely_vote_credits: bool,
     deprecate_unused_legacy_vote_plumbing: bool,
+    parent_slot: u64,
 ) -> Result<(), VoteError> {
     check_slots_are_valid(vote_state, vote_slots, &vote.hash, slot_hashes)?;
     vote_slots.iter().for_each(|s| {
@@ -750,6 +751,7 @@ pub fn process_vote_unfiltered(
             current_slot,
             timely_vote_credits,
             deprecate_unused_legacy_vote_plumbing,
+            parent_slot,
         )
     });
     Ok(())
@@ -786,11 +788,16 @@ pub fn process_vote(
         current_slot,
         timely_vote_credits,
         deprecate_unused_legacy_vote_plumbing,
+        0
     )
 }
 
 /// "unchecked" functions used by tests and Tower
-pub fn process_vote_unchecked(vote_state: &mut VoteState, vote: Vote) -> Result<(), VoteError> {
+pub fn process_vote_unchecked(
+    vote_state: &mut VoteState,
+    vote: Vote,
+    parent_slot: u64,
+) -> Result<(), VoteError> {
     if vote.slots.is_empty() {
         return Err(VoteError::EmptySlots);
     }
@@ -804,6 +811,7 @@ pub fn process_vote_unchecked(vote_state: &mut VoteState, vote: Vote) -> Result<
         0,
         true,
         true,
+        parent_slot,
     )
 }
 
@@ -815,7 +823,7 @@ pub fn process_slot_votes_unchecked(vote_state: &mut VoteState, slots: &[Slot]) 
 }
 
 pub fn process_slot_vote_unchecked(vote_state: &mut VoteState, slot: Slot) {
-    let _ = process_vote_unchecked(vote_state, Vote::new(vec![slot], Hash::default()));
+    let _ = process_vote_unchecked(vote_state, Vote::new(vec![slot], Hash::default()), 0);
 }
 
 /// Authorize the given pubkey to withdraw or sign votes. This may be called multiple times,
@@ -1280,7 +1288,7 @@ mod tests {
             134, 135,
         ]
         .into_iter()
-        .for_each(|v| vote_state.process_next_vote_slot(v, 4, 0, false, true));
+        .for_each(|v| vote_state.process_next_vote_slot(v, 4, 0, false, true, 0));
 
         let version1_14_11_serialized = bincode::serialize(&VoteStateVersions::V1_14_11(Box::new(
             VoteState1_14_11::from(vote_state.clone()),
@@ -1978,6 +1986,7 @@ mod tests {
                     hash: Hash::new_unique(),
                     timestamp: None,
                 },
+                0,
             )
             .unwrap();
 
@@ -3142,6 +3151,7 @@ mod tests {
                 0,
                 true,
                 true,
+                0,
             )
             .unwrap();
         }
