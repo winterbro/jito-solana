@@ -380,7 +380,9 @@ impl TipManager {
         block_builder: &Pubkey,
         block_builder_commission: u64,
     ) -> Result<SanitizedTransaction> {
+        info!("sss 1 my builder: {block_builder:?}");
         let config = self.get_tip_payment_config_account(bank)?;
+        info!("sss 1 program's builder: {:?}", config.block_builder);
         Ok(self.build_change_tip_receiver_and_block_builder_tx(
             &config.tip_receiver,
             new_tip_receiver,
@@ -586,3 +588,6 @@ impl TipManager {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {}
