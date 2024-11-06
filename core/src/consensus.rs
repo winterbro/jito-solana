@@ -603,6 +603,7 @@ impl Tower {
             bank.feature_set
                 .is_active(&solana_feature_set::enable_tower_sync_ix::id()),
             block_id,
+            0,
         )
     }
 
@@ -647,12 +648,13 @@ impl Tower {
         vote_hash: Hash,
         enable_tower_sync_ix: bool,
         block_id: Hash,
+        parent_slot: u64,
     ) -> Option<Slot> {
         trace!("{} record_vote for {}", self.node_pubkey, vote_slot);
         let old_root = self.root();
 
         let vote = Vote::new(vec![vote_slot], vote_hash);
-        let result = process_vote_unchecked(&mut self.vote_state, vote);
+        let result = process_vote_unchecked(&mut self.vote_state, vote, parent_slot);
         if result.is_err() {
             panic!(
                 "Error while recording vote {} {} in local tower {:?}",
@@ -677,7 +679,7 @@ impl Tower {
 
     #[cfg(feature = "dev-context-only-utils")]
     pub fn record_vote(&mut self, slot: Slot, hash: Hash) -> Option<Slot> {
-        self.record_bank_vote_and_update_lockouts(slot, hash, true, Hash::default())
+        self.record_bank_vote_and_update_lockouts(slot, hash, true, Hash::default(), 0)
     }
 
     #[cfg(feature = "dev-context-only-utils")]
