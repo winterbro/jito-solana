@@ -452,8 +452,8 @@ impl Tpu {
 mod test {
     use {
         super::calculate_block_cost_limit_reservation,
-        solana_ledger::genesis_utils::create_genesis_config, solana_pubkey::Pubkey,
-        solana_runtime::bank::Bank, std::sync::Arc,
+        solana_ledger::genesis_utils::create_genesis_config, solana_runtime::bank::Bank,
+        solana_sdk::pubkey::Pubkey, std::sync::Arc,
     };
 
     #[test]

@@ -426,6 +426,7 @@ impl BankingStage {
                     prioritization_fee_cache,
                     blacklisted_accounts,
                     bundle_account_locker,
+                    block_cost_limit_reservation_cb,
                 )
             }
             BlockProductionMethod::CentralScheduler => Self::new_central_scheduler(
@@ -465,6 +466,7 @@ impl BankingStage {
         prioritization_fee_cache: &Arc<PrioritizationFeeCache>,
         blacklisted_accounts: HashSet<Pubkey>,
         bundle_account_locker: BundleAccountLocker,
+        block_cost_limit_reservation_cb: impl Fn(&Bank) -> u64 + Clone + Send + 'static,
     ) -> Self {
         assert!(num_threads >= MIN_TOTAL_THREADS);
         // Single thread to generate entries from many banks.
@@ -533,6 +535,7 @@ impl BankingStage {
                     unprocessed_transaction_storage,
                     blacklisted_accounts.clone(),
                     bundle_account_locker.clone(),
+                    block_cost_limit_reservation_cb.clone(),
                 )
             })
             .collect();
