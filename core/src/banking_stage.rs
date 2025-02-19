@@ -950,6 +950,7 @@ mod tests {
             sync::atomic::{AtomicBool, Ordering},
             thread::sleep,
         },
+        strum::IntoEnumIterator,
     };
 
     pub(crate) fn new_test_cluster_info(keypair: Option<Arc<Keypair>>) -> (Node, ClusterInfo) {
@@ -1620,5 +1621,117 @@ mod tests {
             poh_service.join().unwrap();
         }
         Blockstore::destroy(ledger_path.path()).unwrap();
+    }
+
+    #[test]
+    fn test_blacklisted_accounts() {
+        solana_logger::setup();
+
+        for block_production_method in BlockProductionMethod::iter() {
+            let GenesisConfigInfo {
+                genesis_config,
+                mint_keypair,
+                ..
+            } = create_slow_genesis_config(10);
+            let (bank, bank_forks) = Bank::new_no_wallclock_throttle_for_tests(&genesis_config);
+            let start_hash = bank.last_blockhash();
+            let banking_tracer = BankingTracer::new_disabled();
+            let (non_vote_sender, non_vote_receiver) = banking_tracer.create_channel_non_vote();
+            let (tpu_vote_sender, tpu_vote_receiver) = banking_tracer.create_channel_tpu_vote();
+            let (gossip_vote_sender, gossip_vote_receiver) =
+                banking_tracer.create_channel_gossip_vote();
+            let ledger_path = get_tmp_ledger_path_auto_delete!();
+            {
+                let blockstore = Arc::new(
+                    Blockstore::open(ledger_path.path())
+                        .expect("Expected to be able to open database ledger"),
+                );
+                let poh_config = PohConfig {
+                    // limit tick count to avoid clearing working_bank at PohRecord then
+                    // PohRecorderError(MaxHeightReached) at BankingStage
+                    target_tick_count: Some(bank.max_tick_height() - 1),
+                    ..PohConfig::default()
+                };
+                let (exit, poh_recorder, poh_service, entry_receiver) =
+                    create_test_recorder(bank.clone(), blockstore, Some(poh_config), None);
+                let (_, cluster_info) = new_test_cluster_info(/*keypair:*/ None);
+                let cluster_info = Arc::new(cluster_info);
+                let (replay_vote_sender, _replay_vote_receiver) = unbounded();
+
+                let blacklisted_keypair = Keypair::new();
+
+                let banking_stage = BankingStage::new(
+                    block_production_method,
+                    &cluster_info,
+                    &poh_recorder,
+                    non_vote_receiver,
+                    tpu_vote_receiver,
+                    gossip_vote_receiver,
+                    None,
+                    replay_vote_sender,
+                    None,
+                    Arc::new(ConnectionCache::new("connection_cache_test")),
+                    bank_forks.clone(), // keep a local-copy of bank-forks so worker threads do not lose weak access to bank-forks
+                    &Arc::new(PrioritizationFeeCache::new(0u64)),
+                    false,
+                    HashSet::from_iter([blacklisted_keypair.pubkey()]),
+                    BundleAccountLocker::default(),
+                    |_| 0,
+                );
+
+                // bad tx
+                let blacklisted_tx = system_transaction::transfer(
+                    &mint_keypair,
+                    &blacklisted_keypair.pubkey(),
+                    2,
+                    start_hash,
+                );
+
+                // good tx
+                let good_keypair = Keypair::new();
+                let ok_tx = system_transaction::transfer(
+                    &mint_keypair,
+                    &good_keypair.pubkey(),
+                    2,
+                    start_hash,
+                );
+
+                // send 'em over
+                let packet_batches = to_packet_batches(&[blacklisted_tx.clone(), ok_tx.clone()], 2);
+
+                // glad they all fit
+                assert_eq!(packet_batches.len(), 1);
+                non_vote_sender // no_ver, anf, tx
+                    .send(BankingPacketBatch::new((packet_batches, None)))
+                    .unwrap();
+
+                drop(non_vote_sender);
+                drop(tpu_vote_sender);
+                drop(gossip_vote_sender);
+                // wait until banking_stage to finish up all packets
+                banking_stage.join().unwrap();
+
+                exit.store(true, Ordering::Relaxed);
+                poh_service.join().unwrap();
+                drop(poh_recorder);
+
+                loop {
+                    if bank.get_balance(&good_keypair.pubkey()) == 2 {
+                        break;
+                    }
+
+                    sleep(Duration::from_millis(200));
+                }
+
+                assert_eq!(bank.get_balance(&good_keypair.pubkey()), 2);
+                assert!(bank.has_signature(&ok_tx.signatures[0]));
+
+                assert_eq!(bank.get_balance(&blacklisted_keypair.pubkey()), 0);
+                assert!(!bank.has_signature(&blacklisted_tx.signatures[0]));
+
+                drop(entry_receiver);
+            }
+            Blockstore::destroy(ledger_path.path()).unwrap();
+        }
     }
 }
