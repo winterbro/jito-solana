@@ -7367,6 +7367,7 @@ dependencies = [
  "assert_matches",
  "bincode",
  "bitflags 2.6.0",
+ "borsh 1.5.1",
  "bs58 0.5.1",
  "byteorder",
  "bzip2",
