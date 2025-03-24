@@ -215,7 +215,7 @@ fn find_expired_claim_status_accounts(
         .iter()
         .filter_map(|(pubkey, account)| {
             let claim_status = ClaimStatus::try_deserialize(&mut account.data.as_slice()).ok()?;
-            if claim_status.claim_status_payer.eq(&payer) && epoch > claim_status.expires_at {
+            if epoch > claim_status.expires_at {
                 Some((*pubkey, account.clone()))
             } else {
                 None
