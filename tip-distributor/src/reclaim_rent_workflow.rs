@@ -212,7 +212,6 @@ pub async fn reclaim_rent(
 fn find_expired_claim_status_accounts(
     accounts: &[(Pubkey, Account)],
     epoch: Epoch,
-    payer: Pubkey,
 ) -> Vec<(Pubkey, Account)> {
     accounts
         .iter()
