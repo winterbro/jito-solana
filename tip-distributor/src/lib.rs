@@ -578,7 +578,7 @@ pub async fn send_until_blockhash_expires(
                     RpcSendTransactionConfig {
                         skip_preflight: false,
                         preflight_commitment: Some(CommitmentLevel::Confirmed),
-                        max_retries: Some(2),
+                        max_retries: Some(1),
                         ..RpcSendTransactionConfig::default()
                     },
                 )
