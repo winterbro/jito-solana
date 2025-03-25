@@ -98,13 +98,7 @@ pub async fn reclaim_rent(
         transactions.shuffle(&mut thread_rng());
         for chunk in transactions.chunks(1_000) {
             let blockhash = rpc_client.get_latest_blockhash().await?;
-            send_until_blockhash_expires(
-                &rpc_client,
-                chunk.into_iter().collect(),
-                blockhash,
-                &signer,
-            )
-            .await?;
+            send_until_blockhash_expires(&rpc_client, chunk.to_vec(), blockhash, &signer).await?;
             sleep(Duration::from_secs(30)).await;
         }
 
