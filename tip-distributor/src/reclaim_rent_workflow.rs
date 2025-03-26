@@ -63,8 +63,7 @@ pub async fn reclaim_rent(
         Config::try_deserialize(&mut config_account.data.as_slice()).map_err(AnchorError)?;
 
     let epoch = rpc_client.get_epoch_info().await?.epoch;
-    let mut claim_status_pubkeys_to_expire =
-        find_expired_claim_status_accounts(&accounts, epoch, signer.pubkey());
+    let mut claim_status_pubkeys_to_expire = find_expired_claim_status_accounts(&accounts, epoch);
     let mut tda_pubkeys_to_expire = find_expired_tda_accounts(&accounts, epoch);
 
     while start.elapsed() <= max_loop_duration {
