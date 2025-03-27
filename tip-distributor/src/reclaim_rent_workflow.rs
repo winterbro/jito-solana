@@ -47,7 +47,7 @@ pub async fn reclaim_rent(
 ) -> Result<(), ClaimMevError> {
     let rpc_client = RpcClient::new_with_timeout_and_commitment(
         rpc_url.clone(),
-        Duration::from_secs(3600),
+        Duration::from_secs(4800),
         CommitmentConfig::processed(),
     );
 
@@ -95,7 +95,7 @@ pub async fn reclaim_rent(
         }
 
         transactions.shuffle(&mut thread_rng());
-        for chunk in transactions.chunks(1_000) {
+        for chunk in transactions.chunks(5_000) {
             let blockhash = rpc_client.get_latest_blockhash().await?;
             send_until_blockhash_expires(&rpc_client, chunk.to_vec(), blockhash, &signer).await?;
             sleep(Duration::from_secs(30)).await;
