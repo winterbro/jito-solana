@@ -255,6 +255,7 @@ pub trait AdminRpc {
         meta: Self::Metadata,
         block_engine_url: String,
         trust_packets: bool,
+        disable_block_engine_autoconfig: bool,
     ) -> Result<()>;
 
     #[rpc(meta, name = "setRelayerConfig")]
@@ -484,11 +485,13 @@ impl AdminRpc for AdminRpcImpl {
         meta: Self::Metadata,
         block_engine_url: String,
         trust_packets: bool,
+        disable_block_engine_autoconfig: bool,
     ) -> Result<()> {
         debug!("set_block_engine_config request received");
         let config = BlockEngineConfig {
             block_engine_url,
             trust_packets,
+            disable_block_engine_autoconfig,
         };
         // Detailed log messages are printed inside validate function
         if BlockEngineStage::is_valid_block_engine_config(&config) {

@@ -81,6 +81,9 @@ pub struct BlockEngineConfig {
 
     /// If set then it will be assumed the backend verified packets so signature verification will be bypassed in the validator.
     pub trust_packets: bool,
+
+    /// Disables block engine auto-configuration, meaning pinging for the closest region. Values provided to `--block-engine-url` and `--shred-receiver-address` will be used as-is.
+    pub disable_block_engine_autoconfig: bool,
 }
 
 pub struct BlockEngineStage {

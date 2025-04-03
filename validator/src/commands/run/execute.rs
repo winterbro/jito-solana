@@ -656,9 +656,10 @@ pub fn execute(
         block_engine_url: if matches.is_present("block_engine_url") {
             value_of(matches, "block_engine_url").expect("couldn't parse block_engine_url")
         } else {
-            "".to_string()
+            String::default()
         },
         trust_packets: matches.is_present("trust_block_engine_packets"),
+        disable_block_engine_autoconfig: matches.is_present("disable_block_engine_autoconfig"),
     }));
 
     // Defaults are set in cli definition, safe to use unwrap() here
