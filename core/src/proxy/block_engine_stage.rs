@@ -3,6 +3,9 @@
 //! The Block Engine is responsible for the following:
 //! - Acts as a system that sends high profit bundles and transactions to a validator.
 //! - Sends transactions and bundles to the validator.
+use reqwest::header::{HeaderMap, HeaderName, HeaderValue, ORIGIN};
+use std::error::Error;
+use std::time::Instant;
 use {
     crate::{
         banking_trace::BankingPacketSender,
@@ -289,7 +292,36 @@ impl BlockEngineStage {
         )
         .await
     }
+    async fn http_latency_test(url: String, request_count: u8) -> Result<(), reqwest::Error> {
+        let client = reqwest::Client::new();
 
+        let mut headers = HeaderMap::with_capacity(2);
+        headers.insert(
+            HeaderName::from_static("access-control-request-method"),
+            HeaderValue::from_static("POST"),
+        );
+        headers.insert(ORIGIN, HeaderValue::from_static(&url));
+
+        let mut rtts: Vec<Duration> = Vec::with_capacity(request_count as usize);
+        for _i in 1..=request_count {
+            let start = Instant::now();
+            let response = client
+                .request(reqwest::Method::OPTIONS, &url)
+                .headers(headers.clone())
+                .send()
+                .await?;
+            let duration = start.elapsed();
+            rtts.push(duration);
+        }
+
+        // Sort the RTTs to compute the median
+        rtts.sort();
+        // For 5 values, the median is the third value (index 2)
+        let median = rtts[2];
+        println!("Median RTT: {:?}", median);
+
+        Ok(())
+    }
     #[allow(clippy::too_many_arguments)]
     async fn start_consuming_block_engine_bundles_and_packets(
         bundle_tx: &Sender<Vec<PacketBundle>>,
