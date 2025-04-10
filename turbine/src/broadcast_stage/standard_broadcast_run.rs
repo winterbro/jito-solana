@@ -11,9 +11,7 @@ use {
         blockstore,
         shred::{shred_code, ProcessShredsStats, ReedSolomonCache, Shred, ShredType, Shredder},
     },
-    solana_sdk::{
-        hash::Hash, signature::Keypair, timing::AtomicInterval,
-    },
+    solana_sdk::{hash::Hash, signature::Keypair, timing::AtomicInterval},
     std::{borrow::Cow, net::SocketAddr, sync::RwLock, time::Duration},
     tokio::sync::mpsc::Sender as AsyncSender,
 };
