@@ -1,6 +1,7 @@
 //! Vote program processor
 
 use {
+    agave_feature_set::FeatureSet,
     crate::vote_state,
     log::*,
     solana_bincode::limited_deserialize,
@@ -63,6 +64,7 @@ declare_process_instruction!(Entrypoint, DEFAULT_COMPUTE_UNITS, |invoke_context|
     }
 
     let signers = instruction_context.get_signers(transaction_context)?;
+    let feature_set = FeatureSet::default();
     match limited_deserialize(data, solana_packet::PACKET_DATA_SIZE as u64)? {
         VoteInstruction::InitializeAccount(vote_init) => {
             let rent = get_sysvar_with_account_check::rent(invoke_context, instruction_context, 1)?;
@@ -126,6 +128,7 @@ declare_process_instruction!(Entrypoint, DEFAULT_COMPUTE_UNITS, |invoke_context|
                 &signers,
                 sysvar_cache.get_epoch_schedule()?.as_ref(),
                 sysvar_cache.get_clock()?.as_ref(),
+                &feature_set,
             )
         }
         VoteInstruction::Vote(vote) | VoteInstruction::VoteSwitch(vote, _) => {
@@ -136,7 +139,7 @@ declare_process_instruction!(Entrypoint, DEFAULT_COMPUTE_UNITS, |invoke_context|
                 get_sysvar_with_account_check::slot_hashes(invoke_context, instruction_context, 1)?;
             let clock =
                 get_sysvar_with_account_check::clock(invoke_context, instruction_context, 2)?;
-            vote_state::process_vote_with_account(&mut me, &slot_hashes, &clock, &vote, &signers)
+            vote_state::process_vote_with_account(&mut me, &slot_hashes, &clock, &vote, &signers, &feature_set)
         }
         VoteInstruction::UpdateVoteState(vote_state_update)
         | VoteInstruction::UpdateVoteStateSwitch(vote_state_update, _) => {
@@ -152,6 +155,7 @@ declare_process_instruction!(Entrypoint, DEFAULT_COMPUTE_UNITS, |invoke_context|
                 &clock,
                 vote_state_update,
                 &signers,
+                &feature_set,
             )
         }
         VoteInstruction::CompactUpdateVoteState(vote_state_update)
@@ -168,6 +172,7 @@ declare_process_instruction!(Entrypoint, DEFAULT_COMPUTE_UNITS, |invoke_context|
                 &clock,
                 vote_state_update,
                 &signers,
+                &feature_set,
             )
         }
         VoteInstruction::TowerSync(tower_sync)
@@ -181,6 +186,7 @@ declare_process_instruction!(Entrypoint, DEFAULT_COMPUTE_UNITS, |invoke_context|
                 &clock,
                 tower_sync,
                 &signers,
+                &feature_set,
             )
         }
         VoteInstruction::Withdraw(lamports) => {

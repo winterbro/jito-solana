@@ -105,10 +105,18 @@ impl VoteSimulator {
                     let tower_sync = if let Some(vote_account) =
                         parent_bank.get_vote_account(&keypairs.vote_keypair.pubkey())
                     {
-                        let mut vote_state = TowerVoteState::from(vote_account.vote_state_view());
-                        vote_state.process_next_vote_slot(parent);
+                        let mut vote_state = vote_account.vote_state().clone();
+                        process_vote_unchecked(
+                            &mut vote_state,
+                            solana_vote_program::vote_state::Vote::new(
+                                vec![parent],
+                                parent_bank.hash(),
+                            ),
+                            true
+                        )
+                        .unwrap();
                         TowerSync::new(
-                            vote_state.votes,
+                            vote_state.votes.iter().map(|vote| vote.lockout).collect(),
                             vote_state.root_slot,
                             parent_bank.hash(),
                             Hash::default(),
@@ -136,14 +144,13 @@ impl VoteSimulator {
                     let vote_account = new_bank
                         .get_vote_account(&keypairs.vote_keypair.pubkey())
                         .unwrap();
-                    let vote_state_view = vote_account.vote_state_view();
-                    assert!(vote_state_view
-                        .votes_iter()
-                        .any(|lockout| lockout.slot() == parent));
+                    let state = vote_account.vote_state();
+                    assert!(state.votes.iter().any(|lockout| lockout.slot() == parent));
                 }
             }
-
-            new_bank.fill_bank_with_ticks_for_tests();
+            while new_bank.tick_height() < new_bank.max_tick_height() {
+                new_bank.register_unique_tick();
+            }
             if !visit.node().has_no_child() || is_frozen {
                 new_bank.set_block_id(Some(Hash::new_unique()));
                 new_bank.freeze();
@@ -174,7 +181,8 @@ impl VoteSimulator {
             .read()
             .unwrap()
             .frozen_banks()
-            .map(|(_slot, bank)| bank)
+            .values()
+            .cloned()
             .collect();
 
         let _ = ReplayStage::compute_bank_stats(
@@ -199,6 +207,7 @@ impl VoteSimulator {
 
         // Try to vote on the given slot
         let descendants = self.bank_forks.read().unwrap().descendants();
+        let mut last_logged_vote_slot = 0;
         let SelectVoteAndResetForkResult {
             heaviest_fork_failures,
             ..
@@ -211,6 +220,7 @@ impl VoteSimulator {
             tower,
             &self.latest_validator_votes_for_frozen_banks,
             &self.heaviest_subtree_fork_choice,
+            &mut last_logged_vote_slot,
         );
 
         // Make sure this slot isn't locked out or failing threshold
@@ -219,7 +229,7 @@ impl VoteSimulator {
             return heaviest_fork_failures;
         }
 
-        let new_root = tower.record_bank_vote(&vote_bank);
+        let new_root = tower.record_bank_vote(&vote_bank, true);
         if let Some(new_root) = new_root {
             self.set_root(new_root);
         }
@@ -397,7 +407,9 @@ pub fn initialize_state(
         bank0.transfer(10_000, &mint_keypair, pubkey).unwrap();
     }
 
-    bank0.fill_bank_with_ticks_for_tests();
+    while bank0.tick_height() < bank0.max_tick_height() {
+        bank0.register_unique_tick();
+    }
     bank0.freeze();
     let mut progress = ProgressMap::default();
     progress.insert(
