@@ -21,6 +21,19 @@ use {
     },
 };
 
+// Add an extension trait to handle the 4-parameter version
+trait VoteStateExt {
+    fn process_next_vote_slot_ext(&mut self, slot: Slot, epoch: Epoch, current_slot: Slot, _pop_expired: bool);
+}
+
+// Implement the extension trait for VoteState
+impl VoteStateExt for VoteState {
+    fn process_next_vote_slot_ext(&mut self, slot: Slot, epoch: Epoch, current_slot: Slot, _pop_expired: bool) {
+        // Ignore the pop_expired parameter and call the 3-parameter method
+        self.process_next_vote_slot(slot, epoch, current_slot);
+    }
+}
+
 // utility function, used by Stakes, tests
 pub fn from<T: ReadableAccount>(account: &T) -> Option<VoteState> {
     VoteState::deserialize(account.data()).ok()
@@ -605,11 +618,12 @@ pub fn process_vote_unfiltered(
     slot_hashes: &[SlotHash],
     epoch: Epoch,
     current_slot: Slot,
+    pop_expired: bool,
 ) -> Result<(), VoteError> {
     check_slots_are_valid(vote_state, vote_slots, &vote.hash, slot_hashes)?;
     vote_slots
         .iter()
-        .for_each(|s| vote_state.process_next_vote_slot(*s, epoch, current_slot));
+        .for_each(|s| vote_state.process_next_vote_slot_ext(*s, epoch, current_slot, pop_expired));
     Ok(())
 }
 
@@ -640,6 +654,7 @@ pub fn process_vote(
         slot_hashes,
         epoch,
         current_slot,
+        true,
     )
 }
 
@@ -656,6 +671,7 @@ pub fn process_vote_unchecked(vote_state: &mut VoteState, vote: Vote) -> Result<
         &slot_hashes,
         vote_state.current_epoch(),
         0,
+        true,
     )
 }
 
@@ -2812,7 +2828,7 @@ mod tests {
                 .unwrap()
                 .1;
             let vote = Vote::new(vote_slots, vote_hash);
-            process_vote_unfiltered(&mut vote_state, &vote.slots, &vote, slot_hashes, 0, 0)
+            process_vote_unfiltered(&mut vote_state, &vote.slots, &vote, slot_hashes, 0, 0, true)
                 .unwrap();
         }
 
