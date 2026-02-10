@@ -1919,7 +1919,7 @@ fn test_compute_bank_stats_confirmed() {
     // bank 1, so no slot should be confirmed.
     {
         let fork_progress = progress.get(&0).unwrap();
-        let confirmed_forks = ReplayStage::tower_duplicate_confirmed_forks(
+        let (confirmed_forks, _mostly_confirmed) = ReplayStage::tower_duplicate_confirmed_forks(
             &tower,
             &fork_progress.fork_stats.voted_stakes,
             fork_progress.fork_stats.total_stake,
@@ -1973,7 +1973,7 @@ fn test_compute_bank_stats_confirmed() {
     assert_eq!(newly_computed, vec![1]);
     {
         let fork_progress = progress.get(&1).unwrap();
-        let confirmed_forks = ReplayStage::tower_duplicate_confirmed_forks(
+        let (confirmed_forks, _mostly_confirmed) = ReplayStage::tower_duplicate_confirmed_forks(
             &tower,
             &fork_progress.fork_stats.voted_stakes,
             fork_progress.fork_stats.total_stake,
@@ -4201,7 +4201,7 @@ fn test_unconfirmed_duplicate_slots_and_lockouts_for_non_heaviest_fork() {
     assert_eq!(reset_fork.unwrap(), 4);
 
     // Record the vote for 5 which is not on the heaviest fork.
-    tower.record_bank_vote(&bank_forks.read().unwrap().get(5).unwrap());
+    tower.record_bank_vote(&bank_forks.read().unwrap().get(5).unwrap(), true);
 
     // 4 should be the heaviest slot, but should not be votable
     // because of lockout. 5 is the heaviest slot on the same fork as the last vote.
@@ -4433,7 +4433,7 @@ fn test_unconfirmed_duplicate_slots_and_lockouts() {
     assert_eq!(reset_fork.unwrap(), 4);
 
     // Record the vote for 4
-    tower.record_bank_vote(&bank_forks.read().unwrap().get(4).unwrap());
+    tower.record_bank_vote(&bank_forks.read().unwrap().get(4).unwrap(), true);
 
     // Mark 4 as duplicate, 3 should be the heaviest slot, but should not be votable
     // because of lockout
@@ -4670,7 +4670,7 @@ fn setup_vote_then_rollback(
         ..
     } = vote_simulator;
 
-    tower.record_bank_vote(&bank_forks.read().unwrap().get(first_vote).unwrap());
+    tower.record_bank_vote(&bank_forks.read().unwrap().get(first_vote).unwrap(), true);
 
     // Simulate another version of slot 2 was duplicate confirmed
     let our_bank2_hash = bank_forks.read().unwrap().bank_hash(2).unwrap();
@@ -4791,6 +4791,7 @@ fn run_test_duplicate_rollback_then_vote(first_vote: Slot) -> SelectVoteAndReset
         .select_forks(&frozen_banks, &tower, &progress, &ancestors, &bank_forks);
     assert_eq!(heaviest_bank.slot(), 7);
     assert!(heaviest_bank_on_same_fork.is_none());
+    let mut last_logged_vote_slot: Slot = u64::MAX;
     select_vote_and_reset_forks(
         &heaviest_bank,
         heaviest_bank_on_same_fork.as_ref(),
@@ -4800,6 +4801,7 @@ fn run_test_duplicate_rollback_then_vote(first_vote: Slot) -> SelectVoteAndReset
         &mut tower,
         &latest_validator_votes_for_frozen_banks,
         &tbft_structs.heaviest_subtree_fork_choice,
+        &mut last_logged_vote_slot,
     )
 }
 
@@ -4917,6 +4919,7 @@ fn run_test_duplicate_rollback_then_vote_on_other_duplicate(
         .select_forks(&frozen_banks, &tower, &progress, &ancestors, &bank_forks);
     assert_eq!(heaviest_bank.slot(), 5);
     assert!(heaviest_bank_on_same_fork.is_none());
+    let mut last_logged_vote_slot: Slot = u64::MAX;
     select_vote_and_reset_forks(
         &heaviest_bank,
         heaviest_bank_on_same_fork.as_ref(),
@@ -4926,6 +4929,7 @@ fn run_test_duplicate_rollback_then_vote_on_other_duplicate(
         &mut tower,
         &latest_validator_votes_for_frozen_banks,
         &tbft_structs.heaviest_subtree_fork_choice,
+        &mut last_logged_vote_slot,
     )
 }
 
@@ -5110,7 +5114,7 @@ fn test_replay_stage_refresh_last_vote() {
             None,
         ),
     );
-    tower.record_bank_vote(&bank0);
+    tower.record_bank_vote(&bank0, true);
     ReplayStage::push_vote(
         &bank0,
         &my_vote_pubkey,
@@ -5215,7 +5219,7 @@ fn test_replay_stage_refresh_last_vote() {
 
     // Simulate submitting a new vote for bank 1 to the network, but the vote
     // not landing
-    tower.record_bank_vote(&bank1);
+    tower.record_bank_vote(&bank1, true);
     ReplayStage::push_vote(
         &bank1,
         &my_vote_pubkey,
@@ -5487,7 +5491,7 @@ fn send_vote_in_new_bank(
     progress: &mut ProgressMap,
 ) -> Arc<Bank> {
     let my_vote_pubkey = &my_vote_keypair[0].pubkey();
-    tower.record_bank_vote(&parent_bank);
+    tower.record_bank_vote(&parent_bank, true);
     ReplayStage::push_vote(
         &parent_bank,
         my_vote_pubkey,
@@ -5707,6 +5711,7 @@ fn test_replay_stage_last_vote_outside_slot_hashes() {
     assert_eq!(tower.last_voted_slot(), Some(last_voted_slot));
     assert_eq!(progress.my_latest_landed_vote(tip_of_voted_fork), Some(0));
     let other_fork_bank = &bank_forks.read().unwrap().get(other_fork_slot).unwrap();
+    let mut last_logged_vote_slot: Slot = u64::MAX;
     let SelectVoteAndResetForkResult { vote_bank, .. } = select_vote_and_reset_forks(
         other_fork_bank,
         Some(&new_bank),
@@ -5716,6 +5721,7 @@ fn test_replay_stage_last_vote_outside_slot_hashes() {
         &mut tower,
         &latest_validator_votes_for_frozen_banks,
         &tbft_structs.heaviest_subtree_fork_choice,
+        &mut last_logged_vote_slot,
     );
     assert!(vote_bank.is_some());
     assert_eq!(vote_bank.unwrap().0.slot(), tip_of_voted_fork);
@@ -5723,6 +5729,7 @@ fn test_replay_stage_last_vote_outside_slot_hashes() {
     // If last vote is already equal to heaviest_bank_on_same_voted_fork,
     // we should not vote.
     let last_voted_bank = &bank_forks.read().unwrap().get(last_voted_slot).unwrap();
+    let mut last_logged_vote_slot: Slot = u64::MAX;
     let SelectVoteAndResetForkResult { vote_bank, .. } = select_vote_and_reset_forks(
         other_fork_bank,
         Some(last_voted_bank),
@@ -5732,12 +5739,14 @@ fn test_replay_stage_last_vote_outside_slot_hashes() {
         &mut tower,
         &latest_validator_votes_for_frozen_banks,
         &tbft_structs.heaviest_subtree_fork_choice,
+        &mut last_logged_vote_slot,
     );
     assert!(vote_bank.is_none());
 
     // If last vote is still inside slot hashes history of heaviest_bank_on_same_voted_fork,
     // we should not vote.
     let last_voted_bank_plus_1 = &bank_forks.read().unwrap().get(last_voted_slot + 1).unwrap();
+    let mut last_logged_vote_slot: Slot = u64::MAX;
     let SelectVoteAndResetForkResult { vote_bank, .. } = select_vote_and_reset_forks(
         other_fork_bank,
         Some(last_voted_bank_plus_1),
@@ -5747,6 +5756,7 @@ fn test_replay_stage_last_vote_outside_slot_hashes() {
         &mut tower,
         &latest_validator_votes_for_frozen_banks,
         &tbft_structs.heaviest_subtree_fork_choice,
+        &mut last_logged_vote_slot,
     );
     assert!(vote_bank.is_none());
 
@@ -5755,6 +5765,7 @@ fn test_replay_stage_last_vote_outside_slot_hashes() {
         .entry(new_bank.slot())
         .and_modify(|s| s.fork_stats.my_latest_landed_vote = Some(last_voted_slot));
     assert!(!new_bank.is_in_slot_hashes_history(&last_voted_slot));
+    let mut last_logged_vote_slot: Slot = u64::MAX;
     let SelectVoteAndResetForkResult { vote_bank, .. } = select_vote_and_reset_forks(
         other_fork_bank,
         Some(&new_bank),
@@ -5764,6 +5775,7 @@ fn test_replay_stage_last_vote_outside_slot_hashes() {
         &mut tower,
         &latest_validator_votes_for_frozen_banks,
         &tbft_structs.heaviest_subtree_fork_choice,
+        &mut last_logged_vote_slot,
     );
     assert!(vote_bank.is_none());
 }
@@ -6243,6 +6255,7 @@ fn run_compute_and_select_forks(
         ancestors,
         bank_forks,
     );
+    let mut last_logged_vote_slot: Slot = u64::MAX;
     let SelectVoteAndResetForkResult {
         vote_bank,
         reset_bank,
@@ -6256,6 +6269,7 @@ fn run_compute_and_select_forks(
         tower,
         latest_validator_votes_for_frozen_banks,
         heaviest_subtree_fork_choice,
+        &mut last_logged_vote_slot,
     );
     (
         vote_bank.map(|(b, _)| b.slot()),
@@ -6905,6 +6919,7 @@ fn test_mark_slots_duplicate_confirmed() {
     let confirmed_slots = [(0, bank_hash_0)];
     ReplayStage::mark_slots_duplicate_confirmed(
         &confirmed_slots,
+        &[],
         &blockstore,
         &bank_forks,
         &mut progress,
@@ -6925,6 +6940,7 @@ fn test_mark_slots_duplicate_confirmed() {
 
     ReplayStage::mark_slots_duplicate_confirmed(
         &confirmed_slots,
+        &[],
         &blockstore,
         &bank_forks,
         &mut progress,
@@ -6951,6 +6967,7 @@ fn test_mark_slots_duplicate_confirmed() {
 
     ReplayStage::mark_slots_duplicate_confirmed(
         &confirmed_slots,
+        &[],
         &blockstore,
         &bank_forks,
         &mut progress,
@@ -6982,6 +6999,7 @@ fn test_mark_slots_duplicate_confirmed() {
     let confirmed_slots = [(6, Hash::new_unique())];
     ReplayStage::mark_slots_duplicate_confirmed(
         &confirmed_slots,
+        &[],
         &blockstore,
         &bank_forks,
         &mut progress,
