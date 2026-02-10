@@ -208,7 +208,7 @@ pub trait VoteStateHandle {
         }
     }
 
-    fn process_next_vote_slot(&mut self, next_vote_slot: Slot, epoch: Epoch, current_slot: Slot) {
+    fn process_next_vote_slot(&mut self, next_vote_slot: Slot, epoch: Epoch, current_slot: Slot, pop_expired: bool) {
         // Ignore votes for slots earlier than we already have votes for
         if self
             .last_voted_slot()
@@ -217,7 +217,9 @@ pub trait VoteStateHandle {
             return;
         }
 
-        self.pop_expired_votes(next_vote_slot);
+        if pop_expired {
+            self.pop_expired_votes(next_vote_slot);
+        }
 
         let landed_vote = LandedVote {
             latency: compute_vote_latency(next_vote_slot, current_slot),
