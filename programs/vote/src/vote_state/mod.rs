@@ -647,11 +647,12 @@ pub fn process_vote_unfiltered<T: VoteStateHandle>(
     slot_hashes: &[SlotHash],
     epoch: Epoch,
     current_slot: Slot,
+    pop_expired: bool,
 ) -> Result<(), VoteError> {
     check_slots_are_valid(vote_state, vote_slots, &vote.hash, slot_hashes)?;
     vote_slots
         .iter()
-        .for_each(|s| vote_state.process_next_vote_slot(*s, epoch, current_slot));
+        .for_each(|s| vote_state.process_next_vote_slot(*s, epoch, current_slot, pop_expired));
     Ok(())
 }
 
@@ -682,6 +683,7 @@ pub fn process_vote(
         slot_hashes,
         epoch,
         current_slot,
+        true,
     )
 }
 
@@ -689,6 +691,7 @@ pub fn process_vote(
 pub fn process_vote_unchecked<T: VoteStateHandle>(
     vote_state: &mut T,
     vote: Vote,
+    pop_expired: bool,
 ) -> Result<(), VoteError> {
     if vote.slots.is_empty() {
         return Err(VoteError::EmptySlots);
@@ -701,6 +704,7 @@ pub fn process_vote_unchecked<T: VoteStateHandle>(
         &slot_hashes,
         vote_state.current_epoch(),
         0,
+        pop_expired,
     )
 }
 
@@ -712,7 +716,7 @@ pub fn process_slot_votes_unchecked<T: VoteStateHandle>(vote_state: &mut T, slot
 }
 
 pub fn process_slot_vote_unchecked<T: VoteStateHandle>(vote_state: &mut T, slot: Slot) {
-    let _ = process_vote_unchecked(vote_state, Vote::new(vec![slot], Hash::default()));
+    let _ = process_vote_unchecked(vote_state, Vote::new(vec![slot], Hash::default()), true);
 }
 
 /// Authorize the given pubkey to withdraw or sign votes. This may be called multiple times,
@@ -1559,7 +1563,7 @@ mod tests {
             134, 135,
         ]
         .into_iter()
-        .for_each(|v| vote_state.process_next_vote_slot(v, 4, 0));
+        .for_each(|v| vote_state.process_next_vote_slot(v, 4, 0, true));
 
         // Create an initial vote account that is sized for the 1_14_11 version of vote state, and has only the
         // required lamports for rent exempt minimum at that size
@@ -2402,6 +2406,7 @@ mod tests {
                     hash: Hash::new_unique(),
                     timestamp: None,
                 },
+                true,
             )
             .unwrap();
 
@@ -3432,7 +3437,7 @@ mod tests {
                 .unwrap()
                 .1;
             let vote = Vote::new(vote_slots, vote_hash);
-            process_vote_unfiltered(&mut vote_state, &vote.slots, &vote, slot_hashes, 0, 0)
+            process_vote_unfiltered(&mut vote_state, &vote.slots, &vote, slot_hashes, 0, 0, true)
                 .unwrap();
         }
 
