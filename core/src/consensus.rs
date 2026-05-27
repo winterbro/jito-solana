@@ -244,6 +244,18 @@ pub struct Tower {
     after_skip_threshold: Option<u8>,
     threshold_escape_count: Option<u8>,
     last_config_check_seconds: u64,
+    // Vote-packing: skip 1 vote-tx out of every N attempts.
+    // None or Some(N) where N<2 = disabled (push every votable bank).
+    // Some(N>=2) = push N-1 attempts, skip 1, repeat. Skip rate = 1/N.
+    // The skipped slot is still recorded in the local tower and rides out via
+    // TowerSync in the next pushed tx. Hot-reloaded from ./vote_tx_skip_every
+    // every 60s.
+    vote_tx_skip_every: Option<u64>,
+    // Pushes since the last skip. Resets to 0 on skip; increments on push.
+    // Skip fires when this would reach `vote_tx_skip_every - 1`.
+    vote_tx_pushes_since_last_skip: u64,
+    // Slot of the bank we last sent a vote tx for; 0 = never. Telemetry only.
+    last_pushed_vote_slot: Slot,
 }
 
 impl Default for Tower {
@@ -263,6 +275,9 @@ impl Default for Tower {
             after_skip_threshold: None,
             threshold_escape_count: None,
             last_config_check_seconds: 0,
+            vote_tx_skip_every: None,
+            vote_tx_pushes_since_last_skip: 0,
+            last_pushed_vote_slot: 0,
         };
         // VoteState::root_slot is ensured to be Some in Tower
         tower.vote_state.root_slot = Some(Slot::default());
@@ -307,6 +322,9 @@ impl From<Tower1_14_11> for Tower {
             after_skip_threshold: None,
             threshold_escape_count: None,
             last_config_check_seconds: 0,
+            vote_tx_skip_every: None,
+            vote_tx_pushes_since_last_skip: 0,
+            last_pushed_vote_slot: 0,
         }
     }
 }
@@ -330,6 +348,9 @@ impl From<Tower1_7_14> for Tower {
             after_skip_threshold: None,
             threshold_escape_count: None,
             last_config_check_seconds: 0,
+            vote_tx_skip_every: None,
+            vote_tx_pushes_since_last_skip: 0,
+            last_pushed_vote_slot: 0,
         }
     }
 }
@@ -856,6 +877,41 @@ impl Tower {
                     self.threshold_escape_count = None;
                 }
             }
+            // Vote-packing config: ./vote_tx_skip_every
+            // Single positive integer N>=2. Skip 1 in every N vote-tx attempts
+            // (push N-1, skip 1, repeat). Skipped slot rides out via TowerSync
+            // in the next pushed tx. Missing/invalid file = disabled.
+            //
+            // Skip rate = 1/N. Examples:
+            //   N=2  -> skip every 2nd  (50% fee saving, ~3.1% TVC drop)
+            //   N=5  -> skip 1 in 5     (20% fee saving, ~1.25% TVC drop)
+            //   N=10 -> skip 1 in 10    (10% fee saving, ~0.6% TVC drop)
+            match read_to_string(Path::new("./vote_tx_skip_every"))
+                .ok()
+                .and_then(|s| {
+                    s.strip_suffix("\n")
+                        .unwrap_or(&s)
+                        .trim()
+                        .parse::<u64>()
+                        .ok()
+                })
+                .filter(|n| *n >= 2)
+            {
+                Some(n) => {
+                    if self.vote_tx_skip_every != Some(n) {
+                        warn!("Using new vote_tx_skip_every: {}", n);
+                        self.vote_tx_skip_every = Some(n);
+                        self.vote_tx_pushes_since_last_skip = 0;
+                    }
+                }
+                None => {
+                    if self.vote_tx_skip_every.is_some() {
+                        warn!("Disabling vote_tx_skip_every");
+                        self.vote_tx_skip_every = None;
+                        self.vote_tx_pushes_since_last_skip = 0;
+                    }
+                }
+            }
         }
     }
 
@@ -869,6 +925,46 @@ impl Tower {
 
     pub fn get_threshold_escape_count(&self) -> Option<u8> {
         self.threshold_escape_count
+    }
+
+    /// Vote-packing accessor: 1-in-N skip rate, or None when disabled.
+    pub fn get_vote_tx_skip_every(&self) -> Option<u64> {
+        self.vote_tx_skip_every
+    }
+
+    /// Returns true iff the next vote tx should be transmitted. When
+    /// `vote_tx_skip_every` is None or <2, always returns true (byte-identical
+    /// baseline). Otherwise, pushes N-1 attempts then skips 1, repeating.
+    pub fn should_push_vote_tx(&self) -> bool {
+        match self.vote_tx_skip_every {
+            None => true,
+            Some(n) if n < 2 => true,
+            Some(n) => self.vote_tx_pushes_since_last_skip < n - 1,
+        }
+    }
+
+    /// Record that we just sent a vote tx for `slot`. Increments the
+    /// push-since-skip counter used by the next `should_push_vote_tx` check.
+    pub fn mark_vote_tx_pushed(&mut self, slot: Slot) {
+        self.last_pushed_vote_slot = slot;
+        self.vote_tx_pushes_since_last_skip =
+            self.vote_tx_pushes_since_last_skip.saturating_add(1);
+    }
+
+    /// Record that we just skipped a vote-tx transmission. Resets the
+    /// push-since-skip counter so the cycle restarts.
+    pub fn mark_vote_tx_skipped(&mut self) {
+        self.vote_tx_pushes_since_last_skip = 0;
+    }
+
+    /// Slot of the most recent vote tx we emitted, or 0 if never. Telemetry.
+    pub fn last_pushed_vote_slot(&self) -> Slot {
+        self.last_pushed_vote_slot
+    }
+
+    /// Number of consecutive pushes since the last skip. Telemetry.
+    pub fn vote_tx_pushes_since_last_skip(&self) -> u64 {
+        self.vote_tx_pushes_since_last_skip
     }
 
     fn record_bank_vote_and_update_lockouts(
