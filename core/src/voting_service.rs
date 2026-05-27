@@ -30,13 +30,21 @@ pub enum VoteOp {
         tx: Transaction,
         last_voted_slot: Slot,
     },
+    // Persist the tower to disk without dispatching a vote transaction.
+    // Used by the vote-packing path so that votes recorded in memory but not
+    // yet transmitted are still durable across crashes (slashing-safety
+    // invariant: tower-on-disk reflects every recorded vote).
+    SaveTowerOnly {
+        saved_tower: SavedTowerVersions,
+    },
 }
 
 impl VoteOp {
-    fn tx(&self) -> &Transaction {
+    fn tx(&self) -> Option<&Transaction> {
         match self {
-            VoteOp::PushVote { tx, .. } => tx,
-            VoteOp::RefreshVote { tx, .. } => tx,
+            VoteOp::PushVote { tx, .. } => Some(tx),
+            VoteOp::RefreshVote { tx, .. } => Some(tx),
+            VoteOp::SaveTowerOnly { .. } => None,
         }
     }
 }
@@ -111,15 +119,28 @@ impl VotingService {
         vote_op: VoteOp,
         connection_cache: Arc<ConnectionCache>,
     ) {
-        if let VoteOp::PushVote { saved_tower, .. } = &vote_op {
-            let mut measure = Measure::start("tower storage save");
-            if let Err(err) = tower_storage.store(saved_tower) {
-                error!("Unable to save tower to storage: {err:?}");
-                std::process::exit(1);
+        // Persist tower to disk for PushVote and SaveTowerOnly. The
+        // slashing-safety invariant requires that tower-on-disk reflects every
+        // vote we have recorded in memory before we transmit (or skip
+        // transmitting) the vote tx.
+        match &vote_op {
+            VoteOp::PushVote { saved_tower, .. } | VoteOp::SaveTowerOnly { saved_tower } => {
+                let mut measure = Measure::start("tower storage save");
+                if let Err(err) = tower_storage.store(saved_tower) {
+                    error!("Unable to save tower to storage: {err:?}");
+                    std::process::exit(1);
+                }
+                measure.stop();
+                trace!("{measure}");
             }
-            measure.stop();
-            trace!("{measure}");
+            VoteOp::RefreshVote { .. } => {}
         }
+
+        // SaveTowerOnly carries no tx to dispatch — its purpose is just to
+        // make a vote-packed (skipped-transmit) vote durable across crashes.
+        let Some(tx) = vote_op.tx() else {
+            return;
+        };
 
         // Attempt to send our vote transaction to the leaders for the next few
         // slots. From the current slot to the forwarding slot offset
@@ -139,14 +160,14 @@ impl VotingService {
             for tpu_vote_socket in upcoming_leader_sockets {
                 let _ = send_vote_transaction(
                     cluster_info,
-                    vote_op.tx(),
+                    tx,
                     Some(tpu_vote_socket),
                     &connection_cache,
                 );
             }
         } else {
             // Send to our own tpu vote socket if we cannot find a leader to send to
-            let _ = send_vote_transaction(cluster_info, vote_op.tx(), None, &connection_cache);
+            let _ = send_vote_transaction(cluster_info, tx, None, &connection_cache);
         }
 
         match vote_op {
@@ -160,6 +181,9 @@ impl VotingService {
                 last_voted_slot,
             } => {
                 cluster_info.refresh_vote(tx, last_voted_slot);
+            }
+            VoteOp::SaveTowerOnly { .. } => {
+                // Unreachable: tx() is None for this variant and we early-returned above.
             }
         }
     }
