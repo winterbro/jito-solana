@@ -244,6 +244,14 @@ pub struct Tower {
     after_skip_threshold: Option<u8>,
     threshold_escape_count: Option<u8>,
     last_config_check_seconds: u64,
+    // Vote-packing: minimum slot delta between successive vote-tx submissions.
+    // None = disabled (vote tx on every votable bank, baseline behavior).
+    // Some(N) = emit at most one vote tx per N slots; intermediate slots are
+    // still recorded in the local tower and ride out via TowerSync in the next
+    // emitted tx. Hot-reloaded from ./vote_tx_interval every 60s.
+    vote_tx_interval: Option<u64>,
+    // Slot of the bank we last sent a vote tx for; 0 = never.
+    last_pushed_vote_slot: Slot,
 }
 
 impl Default for Tower {
@@ -263,6 +271,8 @@ impl Default for Tower {
             after_skip_threshold: None,
             threshold_escape_count: None,
             last_config_check_seconds: 0,
+            vote_tx_interval: None,
+            last_pushed_vote_slot: 0,
         };
         // VoteState::root_slot is ensured to be Some in Tower
         tower.vote_state.root_slot = Some(Slot::default());
@@ -307,6 +317,8 @@ impl From<Tower1_14_11> for Tower {
             after_skip_threshold: None,
             threshold_escape_count: None,
             last_config_check_seconds: 0,
+            vote_tx_interval: None,
+            last_pushed_vote_slot: 0,
         }
     }
 }
@@ -330,6 +342,8 @@ impl From<Tower1_7_14> for Tower {
             after_skip_threshold: None,
             threshold_escape_count: None,
             last_config_check_seconds: 0,
+            vote_tx_interval: None,
+            last_pushed_vote_slot: 0,
         }
     }
 }
@@ -876,6 +890,34 @@ impl Tower {
                     self.threshold_escape_count = None;
                 }
             }
+            // Vote-packing config: ./vote_tx_interval
+            // Single positive integer N. Vote tx is emitted at most once per N
+            // slots; intermediate slots ride out via TowerSync in the next tx.
+            // Missing/invalid file = disabled (vote on every slot).
+            match read_to_string(Path::new("./vote_tx_interval"))
+                .ok()
+                .and_then(|s| {
+                    s.strip_suffix("\n")
+                        .unwrap_or(&s)
+                        .trim()
+                        .parse::<u64>()
+                        .ok()
+                })
+                .filter(|n| *n >= 2)
+            {
+                Some(n) => {
+                    if self.vote_tx_interval != Some(n) {
+                        warn!("Using new vote_tx_interval: {}", n);
+                        self.vote_tx_interval = Some(n);
+                    }
+                }
+                None => {
+                    if self.vote_tx_interval.is_some() {
+                        warn!("Disabling vote_tx_interval");
+                        self.vote_tx_interval = None;
+                    }
+                }
+            }
         }
     }
 
@@ -889,6 +931,37 @@ impl Tower {
 
     pub fn get_threshold_escape_count(&self) -> Option<u8> {
         self.threshold_escape_count
+    }
+
+    /// Vote-packing accessor: minimum slot delta between successive vote-tx
+    /// emissions, or None when disabled.
+    pub fn get_vote_tx_interval(&self) -> Option<u64> {
+        self.vote_tx_interval
+    }
+
+    /// Returns true iff a vote tx for the given bank slot should be emitted now.
+    /// When `vote_tx_interval` is None (default), always returns true — behavior
+    /// is byte-identical to baseline.
+    pub fn should_push_vote_tx(&self, candidate_vote_slot: Slot) -> bool {
+        match self.vote_tx_interval {
+            None => true,
+            Some(interval) => {
+                self.last_pushed_vote_slot == 0
+                    || candidate_vote_slot >= self.last_pushed_vote_slot + interval
+            }
+        }
+    }
+
+    /// Record that we just sent a vote tx for `slot`. Caller must invoke this
+    /// only when the tx is actually being dispatched.
+    pub fn mark_vote_tx_pushed(&mut self, slot: Slot) {
+        self.last_pushed_vote_slot = slot;
+    }
+
+    /// Slot of the most recent vote tx we emitted, or 0 if never. Used for
+    /// telemetry.
+    pub fn last_pushed_vote_slot(&self) -> Slot {
+        self.last_pushed_vote_slot
     }
 
     fn record_bank_vote_and_update_lockouts(

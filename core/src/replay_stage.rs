@@ -2976,7 +2976,36 @@ impl ReplayStage {
             replay_timing.update_commitment_cache_us += update_commitment_cache_time.as_us();
         }
 
+        // Vote-packing rate limit: when ./vote_tx_interval is configured,
+        // skip emitting a vote tx for slots that fall within `interval` slots
+        // of the previously transmitted vote. The votes are already recorded
+        // in the local tower above, so the next emitted TowerSync covers them
+        // and credits accrue with at most `interval-1` extra slots of TVC
+        // latency. We still persist tower to disk to preserve the
+        // slashing-safety invariant on crash-restart.
+        let target_slot = banks.last().unwrap().slot();
+        if !tower.should_push_vote_tx(target_slot) {
+            let saved_tower = SavedTower::new(tower, identity_keypair).unwrap_or_else(|err| {
+                error!("Unable to create saved tower: {err:?}");
+                std::process::exit(1);
+            });
+            if let Err(err) = voting_sender.send(VoteOp::SaveTowerOnly {
+                saved_tower: SavedTowerVersions::from(saved_tower),
+            }) {
+                warn!("vote-packing: SaveTowerOnly send failed: {err:?}");
+            }
+            datapoint_info!(
+                "vote_tx_skipped",
+                ("slot", target_slot as i64, i64),
+                ("interval", tower.get_vote_tx_interval().unwrap_or(0) as i64, i64),
+                ("last_pushed_slot", tower.last_pushed_vote_slot() as i64, i64),
+                ("batched_slots", new_slots.len() as i64, i64),
+            );
+            return;
+        }
+
         info!("voting for window: {:?}", new_slots);
+        tower.mark_vote_tx_pushed(target_slot);
         Self::push_vote(
             banks.last().unwrap(),
             vote_account_pubkey,
