@@ -793,11 +793,7 @@ impl Tower {
             self.last_config_check_seconds = config_check_seconds;
             match read_to_string(&Path::new("./mostly_confirmed_threshold")) {
                 Ok(s) => {
-                    let split = s
-                        .strip_suffix("\n")
-                        .unwrap_or("")
-                        .split_whitespace()
-                        .collect::<Vec<&str>>();
+                    let split = s.split_whitespace().collect::<Vec<&str>>();
                     match split.get(0).unwrap_or(&"").parse::<f64>() {
                         Ok(threshold) => {
                             if let Some(mostly_confirmed_threshold) =
